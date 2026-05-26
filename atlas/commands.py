@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from atlas.skills import Skill, SkillLoader, SkillNotFound
+from atlas.wiki import initialize_wiki
 
 
 @dataclass(frozen=True)
@@ -38,9 +39,13 @@ def handle_slash_command(
                 action="message",
                 message=f"未知 skill：{skill_name}。輸入 /help 查看可用命令。",
             )
+        message = f"已載入 skill：{skill.name}"
+        if skill.name == "llm-wiki":
+            initialize_wiki(skill_loader.workspace)
+            message = f"已初始化 LLM Wiki；已載入 skill：{skill.name}"
         return SlashCommandResult(
             action="inject-skill",
-            message=f"已載入 skill：{skill.name}",
+            message=message,
             injected_message=format_skill_instructions(skill),
         )
     return SlashCommandResult(

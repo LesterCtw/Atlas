@@ -44,6 +44,16 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn(".atlas/skills/<skill-name>/SKILL.md", readme)
         self.assertIn("atlas.skill_instructions", readme)
 
+    def test_readme_explains_llm_wiki_outputs(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("LLM Wiki 初始化", readme)
+        self.assertIn("wiki/raw-sources", readme)
+        self.assertIn("wiki/pages/concepts", readme)
+        self.assertIn("lint_wiki", readme)
+        self.assertIn("render_html_mirror", readme)
+        self.assertIn("render_graph_html", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

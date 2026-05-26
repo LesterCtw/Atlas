@@ -61,6 +61,20 @@ class SlashCommandTests(unittest.TestCase):
         self.assertIn('<atlas.skill_instructions name="llm-wiki">', result.injected_message)
         self.assertIn("LLM Wiki", result.injected_message)
 
+    def test_llm_wiki_command_initializes_wiki_structure_and_injects_instructions(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            loader = SkillLoader(workspace=workspace)
+
+            result = handle_slash_command("/llm-wiki", skill_loader=loader)
+
+            self.assertTrue((workspace / "wiki" / "index.md").is_file())
+            self.assertTrue((workspace / "wiki" / "raw-sources").is_dir())
+
+        self.assertEqual(result.action, "inject-skill")
+        self.assertIn("已初始化 LLM Wiki", result.message)
+        self.assertIsNotNone(result.injected_message)
+
     def test_workspace_skill_command_returns_injected_instructions(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory)
