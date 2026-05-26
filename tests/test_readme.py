@@ -24,6 +24,17 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("malformed JSON", readme)
         self.assertIn("fake adapter", readme)
 
+    def test_readme_explains_workspace_tool_runtime(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("workspace tool runtime", readme)
+        self.assertIn("file.list", readme)
+        self.assertIn("file.read", readme)
+        self.assertIn("file.search", readme)
+        self.assertIn("file.write", readme)
+        self.assertIn("shell.run", readme)
+        self.assertIn("confirmation-required", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
