@@ -94,6 +94,32 @@ py -3.12 -m venv .venv
 
 成功時會看到 `Probe tGenie UI elements with system Chrome.` 和一串參數說明。
 
+#### 從任何 PowerShell 直接執行 `atlas`
+
+專案決定：公司電腦採用 **User PATH** 方式，讓使用者可以在任意 PowerShell 位置直接輸入 `atlas` 開啟 TUI。這不需要管理員權限，因為只修改目前使用者的 PATH。
+
+在 Atlas 專案資料夾安裝完成後，執行一次：
+
+```powershell
+$atlasScripts = "$PWD\.venv\Scripts"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$atlasScripts;$userPath", "User")
+```
+
+接著關掉 PowerShell，重新開一個新的 PowerShell。之後可以在任何資料夾執行：
+
+```powershell
+atlas
+```
+
+或指定 workspace：
+
+```powershell
+atlas <workspace-path>
+```
+
+這個方式的取捨是：日常使用最方便，但 Atlas 專案資料夾和 `.venv` 不能移走。若移動資料夾，需要重新設定 User PATH。
+
 啟動最小 Atlas TUI：
 
 ```powershell
