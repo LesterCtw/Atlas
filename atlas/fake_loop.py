@@ -22,6 +22,9 @@ class FakeTgenieAdapter:
             raise RuntimeError("Fake tGenie adapter has no response left.")
         return self._responses.pop(0)
 
+    def inject(self, message: str) -> None:
+        self.sent_messages.append(message)
+
 
 @dataclass(frozen=True)
 class FakeToolLoopResult:

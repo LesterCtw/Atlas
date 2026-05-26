@@ -35,6 +35,15 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("shell.run", readme)
         self.assertIn("confirmation-required", readme)
 
+    def test_readme_explains_skill_loader_usage(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("skill loader", readme)
+        self.assertIn("/llm-wiki", readme)
+        self.assertIn("/skill-creator", readme)
+        self.assertIn(".atlas/skills/<skill-name>/SKILL.md", readme)
+        self.assertIn("atlas.skill_instructions", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

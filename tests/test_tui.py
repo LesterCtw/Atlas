@@ -55,6 +55,50 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("收到最終回覆", messages)
                 self.assertIn("Final answer: hello", messages)
 
+    async def test_skill_command_injects_instructions_into_fake_adapter(self) -> None:
+        adapter = FakeTgenieAdapter(responses=[])
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/llm-wiki"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("已載入 skill：llm-wiki", messages)
+
+        self.assertEqual(len(adapter.sent_messages), 1)
+        self.assertIn('<atlas.skill_instructions name="llm-wiki">', adapter.sent_messages[0])
+        self.assertIn("LLM Wiki", adapter.sent_messages[0])
+
+    async def test_skill_creator_command_injects_builtin_instructions(self) -> None:
+        adapter = FakeTgenieAdapter(responses=[])
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/skill-creator"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("已載入 skill：skill-creator", messages)
+
+        self.assertEqual(len(adapter.sent_messages), 1)
+        self.assertIn('<atlas.skill_instructions name="skill-creator">', adapter.sent_messages[0])
+        self.assertIn("Skill Creator", adapter.sent_messages[0])
+
 
 if __name__ == "__main__":
     unittest.main()

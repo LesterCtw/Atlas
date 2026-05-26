@@ -7,6 +7,7 @@ from textual.widgets import Input, RichLog, Static
 
 from atlas.commands import handle_slash_command
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
+from atlas.skills import SkillLoader
 
 
 STATUS_MESSAGES = {
@@ -65,8 +66,11 @@ class AtlasApp(App[None]):
 
         messages = self.query_one("#messages", RichLog)
         if prompt.startswith("/"):
-            result = handle_slash_command(prompt)
+            result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
             messages.write(result.message)
+            if result.action == "inject-skill" and result.injected_message is not None:
+                if self.fake_adapter is not None:
+                    self.fake_adapter.inject(result.injected_message)
             if result.action == "exit":
                 self.exit()
             return
