@@ -31,30 +31,40 @@ class AtlasApp(App[None]):
     }
 
     #header {
-        height: 1;
-        padding: 0 2;
+        height: 2;
+        padding: 1 3 0 3;
         background: #111820;
         color: #d6deeb;
     }
 
     #messages {
         height: 1fr;
-        padding: 1 2;
+        padding: 2 3;
         border: solid #243244;
         background: #0b0f14;
         color: #d6deeb;
     }
 
+    #messages:focus {
+        background-tint: transparent;
+    }
+
     #prompt {
-        height: 3;
-        padding: 1 2;
+        height: 5;
+        padding: 1 3;
+        border: tall #26364a;
         background: #0f151d;
         color: #e6edf3;
     }
 
+    #prompt:focus {
+        border: tall #26364a;
+        background-tint: transparent;
+    }
+
     #status {
-        height: 1;
-        padding: 0 2;
+        height: 2;
+        padding: 0 3 1 3;
         background: #111820;
         color: #8fa3b8;
     }
@@ -71,9 +81,11 @@ class AtlasApp(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
-        yield RichLog(id="messages", wrap=True)
+        messages = RichLog(id="messages", wrap=True)
+        messages.can_focus = False
+        yield messages
         yield Input(
-            placeholder="Enter a prompt or slash command, e.g. /help",
+            placeholder="",
             id="prompt",
             select_on_focus=False,
         )
@@ -93,7 +105,9 @@ class AtlasApp(App[None]):
     def _format_user_prompt(self, prompt: str) -> Text:
         return Text.assemble(
             ("› ", "bold #7dd3fc"),
-            (prompt, "bold #f8fafc on #1f2937"),
+            ("You", "bold #020617 on #7dd3fc"),
+            ("  ", "on #1e293b"),
+            (prompt, "bold #f8fafc on #1e293b"),
         )
 
     def on_mount(self) -> None:

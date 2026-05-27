@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +13,10 @@ from textual.widgets import Input, RichLog, Static
 
 def rich_log_text(log: RichLog) -> str:
     return "\n".join("".join(segment.text for segment in line) for line in log.lines)
+
+
+def screenshot_text(svg: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", svg)).replace("\xa0", " ")
 
 
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
@@ -40,6 +46,35 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Enter", status)
                 self.assertIn("/help", status)
                 self.assertIn("/exit", status)
+
+    async def test_header_and_status_have_breathing_room(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                header = pilot.app.query_one("#header", Static)
+                status = pilot.app.query_one("#status", Static)
+                self.assertEqual(header.region.height, 2)
+                self.assertEqual(status.region.height, 2)
+                self.assertGreaterEqual(header.styles.padding.left, 3)
+                self.assertGreaterEqual(status.styles.padding.left, 3)
+                self.assertEqual(header.styles.padding.top, 1)
+                self.assertEqual(status.styles.padding.bottom, 1)
+
+    async def test_mouse_focus_does_not_create_box_highlight(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                messages = pilot.app.query_one("#messages", RichLog)
+                prompt = pilot.app.query_one("#prompt", Input)
+                self.assertFalse(messages.can_focus)
+                self.assertEqual(prompt.styles.border.top[1].hex6, "#26364A")
+                self.assertEqual(prompt.styles.background_tint.a, 0)
 
     async def test_app_focuses_prompt_on_startup(self) -> None:
         with TemporaryDirectory() as directory:
@@ -91,8 +126,39 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
                 self.assertIn("Atlas: Ready.", messages)
-                self.assertIn("› say hello", messages)
-                self.assertIn("Atlas: Ready.\n\n› say hello", messages)
+                self.assertIn("› You  say hello", messages)
+                self.assertIn("Atlas: Ready.\n\n› You  say hello", messages)
+
+    async def test_prompt_text_is_visible_while_typing(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(100, 24)) as pilot:
+                await pilot.pause()
+                await pilot.press("a", "b", "c")
+                await pilot.pause()
+
+                prompt = pilot.app.query_one("#prompt", Input)
+                screenshot = pilot.app.export_screenshot()
+                self.assertEqual(prompt.value, "abc")
+                self.assertIn("abc", screenshot)
+
+    async def test_cjk_prompt_text_is_visible_before_and_after_submission(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(100, 24)) as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "你好啊"
+                await pilot.pause()
+
+                self.assertIn("你好啊", pilot.app.export_screenshot())
+
+                await prompt.action_submit()
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "")
+                self.assertIn("你好啊", pilot.app.export_screenshot())
 
     async def test_app_keeps_prompt_focused_after_slash_command(self) -> None:
         with TemporaryDirectory() as directory:
@@ -120,16 +186,19 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
                 self.assertIn("Atlas: Available commands", messages)
 
-    async def test_prompt_placeholder_mentions_prompt_and_slash_commands(self) -> None:
+    async def test_focused_empty_prompt_does_not_render_placeholder_text(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
 
             async with app.run_test() as pilot:
+                await pilot.pause()
                 prompt = pilot.app.query_one("#prompt", Input)
 
-                self.assertIn("prompt", prompt.placeholder.lower())
-                self.assertIn("slash command", prompt.placeholder.lower())
-                self.assertIn("/help", prompt.placeholder)
+                self.assertEqual(prompt.placeholder, "")
+                self.assertNotIn(
+                    "Enter a prompt",
+                    screenshot_text(pilot.app.export_screenshot()),
+                )
 
     async def test_app_shows_fake_tool_loop_status_updates(self) -> None:
         adapter = FakeTgenieAdapter(

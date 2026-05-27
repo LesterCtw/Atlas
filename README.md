@@ -66,20 +66,24 @@ uv run atlas
 uv run atlas <workspace-path>
 ```
 
-TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不用點選輸入框。如果焦點跑到 transcript，直接開始打字也會回到輸入框。
+TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不用點選輸入框。如果焦點跑到 transcript，直接開始打字也會回到輸入框。輸入框保留足夠高度與 padding，輸入英文或中文時都會直接顯示在底部欄位。
 
-Atlas TUI 目前使用單欄深色 TUI，TUI 畫面文案使用英文：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。status bar 會顯示目前 tool loop 狀態，例如 `Waiting for model`、`Parsing tool call`、`Executing tool`、`Final response` 或 `Tool call error`。
+輸入框刻意不放 placeholder。macOS 中文 IME 在還沒按 Enter 選字前，composition 文字可能會先畫在 terminal 上；如果輸入框底下同時有 placeholder，就可能看到 `Enter...` 的第一個 `E` 和中文疊在一起。現在輸入提示改放在 status bar，避免中文輸入時疊字。
 
-中間訊息區是簡潔 transcript，訊息之間會保留空行，讓文字不要太擠。它會用固定前綴區分不同內容：
+Atlas TUI 目前使用單欄深色 TUI，TUI 畫面文案使用英文：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。header 和 status bar 保留較多 padding，避免文字貼齊 terminal 邊緣。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。status bar 會顯示目前 tool loop 狀態，例如 `Waiting for model`、`Parsing tool call`、`Executing tool`、`Final response` 或 `Tool call error`。
 
-- `› prompt`：你送出的 prompt，使用者輸入會用 highlight 樣式顯示，方便和系統輸出分開。
+TUI 採鍵盤優先操作。滑鼠點 transcript 不會讓 transcript 取得 focus，點輸入框也不會改變框線 highlight；這樣可以避免滑鼠操作造成多餘的視覺狀態。
+
+中間訊息區是簡潔 transcript，訊息區與輸入框都保留較寬鬆的 padding，訊息之間也會保留空行，讓文字不要太擠。它會用固定前綴區分不同內容：
+
+- `› You  prompt`：你送出的 prompt，使用者輸入會用更明顯的 highlight 樣式顯示，方便和系統輸出分開。
 - `Atlas:`：Atlas 啟動訊息、slash command 回覆，或模型最後回覆。
 - `Status:`：tool loop 狀態，例如等待模型、解析 tool call、執行 tool、收到最終回覆。
 - `Error:`：tool call 解析或執行時的錯誤訊息。
 
 **為什麼這樣做**：用文字前綴即可讓 prompt、回覆、狀態和錯誤容易掃描，不需要把 TUI 做成聊天卡片或完整 event inspector。
 
-**影響與取捨**：transcript 會比純文字 log 更清楚，也比較容易測試；使用者輸入會更醒目、訊息間距也更鬆。取捨是第一版只提供簡潔標示，不提供可展開的事件細節。
+**影響與取捨**：transcript 會比純文字 log 更清楚，也比較容易測試；使用者輸入會更醒目、訊息間距也更鬆。取捨是輸入框會多占一點垂直空間，而且第一版只提供簡潔標示，不提供可展開的事件細節。
 
 **為什麼這樣做**：Atlas 想接近 opencode 這類 terminal-first agent 的使用感，但第一版先保持單欄與少量提示，避免加入 theme、autocomplete、diff viewer 或多 session 造成複雜度。
 
