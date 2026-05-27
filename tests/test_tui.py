@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 
 from atlas.fake_loop import FakeTgenieAdapter
 from atlas.tui import AtlasApp
-from textual.widgets import Input, RichLog
+from textual.widgets import Input, RichLog, Static
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -14,7 +14,7 @@ def rich_log_text(log: RichLog) -> str:
 
 
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
-    async def test_app_shows_workspace_messages_and_prompt_input(self) -> None:
+    async def test_app_shows_header_messages_and_prompt_input(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory).resolve()
             app = AtlasApp(workspace=workspace)
@@ -22,9 +22,24 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
             async with app.run_test() as pilot:
                 await pilot.pause()
 
-                self.assertIn(str(workspace), str(pilot.app.query_one("#workspace").render()))
+                header = pilot.app.query_one("#header", Static)
+                self.assertIn("Atlas", str(header.render()))
+                self.assertIn(str(workspace), str(header.render()))
                 pilot.app.query_one("#messages")
                 pilot.app.query_one("#prompt")
+
+    async def test_app_shows_footer_status_hints(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                status = str(pilot.app.query_one("#status", Static).render())
+                self.assertIn("狀態", status)
+                self.assertIn("Enter", status)
+                self.assertIn("/help", status)
+                self.assertIn("/exit", status)
 
     async def test_app_focuses_prompt_on_startup(self) -> None:
         with TemporaryDirectory() as directory:

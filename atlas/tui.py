@@ -23,20 +23,35 @@ class AtlasApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;
+        background: #0b0f14;
+        color: #d6deeb;
     }
 
-    #workspace {
+    #header {
+        height: 1;
         padding: 0 1;
-        background: $surface;
+        background: #111820;
+        color: #d6deeb;
     }
 
     #messages {
         height: 1fr;
-        border: solid $primary;
+        padding: 0 1;
+        border: solid #243244;
+        background: #0b0f14;
+        color: #d6deeb;
     }
 
     #prompt {
-        dock: bottom;
+        background: #0f151d;
+        color: #e6edf3;
+    }
+
+    #status {
+        height: 1;
+        padding: 0 1;
+        background: #111820;
+        color: #8fa3b8;
     }
     """
 
@@ -50,9 +65,10 @@ class AtlasApp(App[None]):
         self.fake_adapter = fake_adapter
 
     def compose(self) -> ComposeResult:
-        yield Static(f"Workspace: {self.workspace}", id="workspace")
+        yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
         yield RichLog(id="messages", wrap=True)
         yield Input(placeholder="輸入 prompt 或 slash command，例如 /help", id="prompt")
+        yield Static("狀態：待命  |  Enter 送出  |  /help 說明  |  /exit 離開", id="status")
 
     def on_mount(self) -> None:
         messages = self.query_one("#messages", RichLog)

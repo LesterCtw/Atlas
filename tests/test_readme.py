@@ -15,6 +15,9 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("atlas <workspace-path>", readme)
         self.assertIn("預設 workspace 是目前資料夾", readme)
         self.assertIn("啟動後會自動聚焦輸入框", readme)
+        self.assertIn("單欄深色 TUI", readme)
+        self.assertIn("header", readme)
+        self.assertIn("status bar", readme)
 
     def test_readme_explains_tool_call_protocol_and_fake_adapter_testing(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

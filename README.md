@@ -68,6 +68,12 @@ uv run atlas <workspace-path>
 
 TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不需要用滑鼠點選。
 
+Atlas TUI 目前使用單欄深色 TUI：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。
+
+**為什麼這樣做**：Atlas 想接近 opencode 這類 terminal-first agent 的使用感，但第一版先保持單欄與少量提示，避免加入 theme、autocomplete、diff viewer 或多 session 造成複雜度。
+
+**影響與取捨**：畫面會比原本最小 Textual 殼更清楚，也更適合鍵盤操作；取捨是目前還不是完整 opencode clone，status bar 也先維持最小資訊。
+
 進入 TUI 後，目前支援：
 
 - `/help`：列出可用命令。
