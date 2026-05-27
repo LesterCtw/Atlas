@@ -13,13 +13,13 @@ from atlas.skills import SkillLoader
 
 
 STATUS_MESSAGES = {
-    "waiting-for-model": "Status: Waiting for model",
-    "parsing-tool-call": "Status: Parsing tool call",
-    "executing-tool": "Status: Executing tool",
-    "final-response": "Status: Final response",
-    "error": "Status: Tool call error",
+    "waiting-for-model": "Working: Waiting for model",
+    "parsing-tool-call": "Working: Parsing tool call",
+    "executing-tool": "Working: Executing tool",
+    "final-response": "Working: Final response",
+    "error": "Working: Tool call error",
 }
-STATUS_HINTS = "Enter Submit  |  /help Help  |  /exit Exit"
+BASE_SLASH_OPTIONS = ["/help", "/exit"]
 
 
 class AtlasApp(App[None]):
@@ -31,17 +31,17 @@ class AtlasApp(App[None]):
     }
 
     #header {
-        height: 2;
-        padding: 1 3 0 3;
+        height: 3;
+        padding: 1 3;
         background: #111820;
         color: #d6deeb;
     }
 
     #messages {
         height: 1fr;
-        padding: 2 3;
-        border: solid #243244;
-        background: #0b0f14;
+        padding: 1 3;
+        border: none;
+        background: #090d13;
         color: #d6deeb;
     }
 
@@ -49,24 +49,34 @@ class AtlasApp(App[None]):
         background-tint: transparent;
     }
 
-    #prompt {
-        height: 5;
+    #slash-suggestions {
+        height: auto;
         padding: 1 3;
-        border: tall #26364a;
+        background: #101923;
+        color: #8fa3b8;
+    }
+
+    .hidden {
+        display: none;
+    }
+
+    #prompt {
+        height: 3;
+        padding: 1 3;
+        border: none;
         background: #0f151d;
         color: #e6edf3;
     }
 
     #prompt:focus {
-        border: tall #26364a;
+        border: none;
         background-tint: transparent;
     }
 
-    #status {
-        height: 2;
-        padding: 0 3 1 3;
-        background: #111820;
-        color: #8fa3b8;
+    #prompt > .input--cursor {
+        background: transparent;
+        color: #e6edf3;
+        text-style: underline;
     }
     """
 
@@ -78,44 +88,105 @@ class AtlasApp(App[None]):
         super().__init__()
         self.workspace = workspace
         self.fake_adapter = fake_adapter
+        self.slash_options: list[str] = []
+        self.selected_slash_index = 0
 
     def compose(self) -> ComposeResult:
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
         messages = RichLog(id="messages", wrap=True)
         messages.can_focus = False
         yield messages
+        yield Static("", id="slash-suggestions", classes="hidden")
         yield Input(
             placeholder="",
             id="prompt",
             select_on_focus=False,
         )
-        yield Static(self._format_status("Status: Idle"), id="status")
-
-    def _format_status(self, message: str) -> str:
-        return f"{message}  |  {STATUS_HINTS}"
-
-    def _set_status(self, message: str) -> None:
-        self.query_one("#status", Static).update(self._format_status(message))
 
     def _write_transcript(self, renderable: object) -> None:
         messages = self.query_one("#messages", RichLog)
         messages.write(renderable)
-        messages.write("")
+
+    def _transcript_rule_width(self) -> int:
+        messages = self.query_one("#messages", RichLog)
+        padding = messages.styles.padding
+        fallback_width = self.size.width - padding.left - padding.right - 2
+        return max(1, messages.scrollable_content_region.width or fallback_width)
+
+    def _write_agent_output(self, renderable: object) -> None:
+        messages = self.query_one("#messages", RichLog)
+        rule_width = self._transcript_rule_width()
+        rule = Text("─" * rule_width, style="#243244")
+        messages.write(rule, width=rule_width)
+        messages.write(renderable)
+        messages.write(rule, width=rule_width)
 
     def _format_user_prompt(self, prompt: str) -> Text:
         return Text.assemble(
             ("› ", "bold #7dd3fc"),
-            ("You", "bold #020617 on #7dd3fc"),
-            ("  ", "on #1e293b"),
-            (prompt, "bold #f8fafc on #1e293b"),
+            ("You", "bold #7dd3fc"),
+            ("  ", "#8fa3b8"),
+            (prompt, "bold #f8fafc"),
         )
 
     def on_mount(self) -> None:
-        self._write_transcript("Atlas: Ready.")
+        self._write_agent_output("Atlas: Ready.")
         self.query_one("#prompt", Input).focus()
+
+    def _available_slash_options(self, value: str = "/") -> list[str]:
+        skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
+        options = [*BASE_SLASH_OPTIONS, *skill_options]
+        if value == "/":
+            return options
+        filtered_options = [option for option in options if option.startswith(value)]
+        return filtered_options
+
+    def _render_slash_suggestions(self) -> None:
+        suggestions = self.query_one("#slash-suggestions", Static)
+        if not self.slash_options:
+            suggestions.add_class("hidden")
+            suggestions.update("")
+            return
+
+        suggestions.remove_class("hidden")
+        lines = Text()
+        for index, option in enumerate(self.slash_options):
+            if index:
+                lines.append("\n")
+            if index == self.selected_slash_index:
+                lines.append("› ", style="bold #7dd3fc")
+                lines.append(option, style="bold #020617 on #7dd3fc")
+            else:
+                lines.append("  ")
+                lines.append(option, style="#8fa3b8")
+        suggestions.update(lines)
+
+    def _update_slash_suggestions(self, value: str) -> None:
+        if not value.startswith("/"):
+            self.slash_options = []
+            self.selected_slash_index = 0
+            self._render_slash_suggestions()
+            return
+
+        self.slash_options = self._available_slash_options(value)
+        self.selected_slash_index = min(self.selected_slash_index, len(self.slash_options) - 1)
+        self._render_slash_suggestions()
+
+    def _selected_slash_option(self) -> str | None:
+        if not self.slash_options:
+            return None
+        return self.slash_options[self.selected_slash_index]
 
     def on_key(self, event: events.Key) -> None:
         prompt = self.query_one("#prompt", Input)
+        if self.focused is prompt and self.slash_options and event.key in {"up", "down"}:
+            direction = -1 if event.key == "up" else 1
+            self.selected_slash_index = (self.selected_slash_index + direction) % len(self.slash_options)
+            self._render_slash_suggestions()
+            event.prevent_default()
+            event.stop()
+            return
+
         if self.focused is prompt or event.character is None or not event.is_printable:
             return
 
@@ -124,15 +195,24 @@ class AtlasApp(App[None]):
         event.prevent_default()
         event.stop()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self._update_slash_suggestions(event.value.strip())
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         prompt = event.value.strip()
+        selected_command = self._selected_slash_option()
+        if prompt.startswith("/") and selected_command is not None:
+            prompt = selected_command
+        self.slash_options = []
+        self.selected_slash_index = 0
+        self._render_slash_suggestions()
         event.input.clear()
         if not prompt:
             return
 
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
-            self._write_transcript(f"Atlas: {result.message}")
+            self._write_agent_output(f"Atlas: {result.message}")
             if result.action == "inject-skill" and result.injected_message is not None:
                 if self.fake_adapter is not None:
                     self.fake_adapter.inject(result.injected_message)
@@ -144,7 +224,6 @@ class AtlasApp(App[None]):
         if self.fake_adapter is None:
             return
 
-        messages = self.query_one("#messages", RichLog)
         result = run_fake_tool_loop(
             initial_prompt=prompt,
             adapter=self.fake_adapter,
@@ -152,11 +231,8 @@ class AtlasApp(App[None]):
         )
         for status_event in result.status_events:
             status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-            messages.write(status_message)
-            messages.write("")
-            self._set_status(status_message)
+            self._write_transcript(status_message)
         if result.error is not None:
-            self._set_status(STATUS_MESSAGES["error"])
-            self._write_transcript(f"Error: {result.error.message}")
+            self._write_agent_output(f"Error: {result.error.message}")
         if result.final_response is not None:
-            self._write_transcript(f"Atlas: {result.final_response}")
+            self._write_agent_output(f"Atlas: {result.final_response}")
