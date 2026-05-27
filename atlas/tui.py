@@ -52,11 +52,12 @@ class AtlasApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Static(f"Workspace: {self.workspace}", id="workspace")
         yield RichLog(id="messages", wrap=True)
-        yield Input(placeholder="Prompt or slash command", id="prompt")
+        yield Input(placeholder="輸入 prompt 或 slash command，例如 /help", id="prompt")
 
     def on_mount(self) -> None:
         messages = self.query_one("#messages", RichLog)
         messages.write("Atlas 已啟動。")
+        self.query_one("#prompt", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         prompt = event.value.strip()

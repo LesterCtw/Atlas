@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 
 from atlas.fake_loop import FakeTgenieAdapter
 from atlas.tui import AtlasApp
-from textual.widgets import RichLog
+from textual.widgets import Input, RichLog
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -25,6 +25,53 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(str(workspace), str(pilot.app.query_one("#workspace").render()))
                 pilot.app.query_one("#messages")
                 pilot.app.query_one("#prompt")
+
+    async def test_app_focuses_prompt_on_startup(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                prompt = pilot.app.query_one("#prompt", Input)
+                self.assertIs(pilot.app.focused, prompt)
+
+    async def test_app_keeps_prompt_focused_after_prompt_submission(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "say hello"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "")
+                self.assertIs(pilot.app.focused, prompt)
+
+    async def test_app_keeps_prompt_focused_after_slash_command(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "/help"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "")
+                self.assertIs(pilot.app.focused, prompt)
+
+    async def test_prompt_placeholder_mentions_prompt_and_slash_commands(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+
+                self.assertIn("prompt", prompt.placeholder.lower())
+                self.assertIn("slash command", prompt.placeholder.lower())
+                self.assertIn("/help", prompt.placeholder)
 
     async def test_app_shows_fake_tool_loop_status_updates(self) -> None:
         adapter = FakeTgenieAdapter(

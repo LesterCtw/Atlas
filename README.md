@@ -66,6 +66,8 @@ uv run atlas
 uv run atlas <workspace-path>
 ```
 
+TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不需要用滑鼠點選。
+
 進入 TUI 後，目前支援：
 
 - `/help`：列出可用命令。
