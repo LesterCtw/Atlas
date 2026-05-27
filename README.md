@@ -70,6 +70,17 @@ TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash comm
 
 Atlas TUI 目前使用單欄深色 TUI：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。
 
+中間訊息區是簡潔 transcript，會用固定前綴區分不同內容：
+
+- `User：`：你送出的 prompt。
+- `Atlas：`：Atlas 啟動訊息、slash command 回覆，或模型最後回覆。
+- `狀態：`：tool loop 狀態，例如等待模型、解析 tool call、執行 tool、收到最終回覆。
+- `Error：`：tool call 解析或執行時的錯誤訊息。
+
+**為什麼這樣做**：用文字前綴即可讓 prompt、回覆、狀態和錯誤容易掃描，不需要把 TUI 做成聊天卡片或完整 event inspector。
+
+**影響與取捨**：transcript 會比純文字 log 更清楚，也比較容易測試；取捨是第一版只提供簡潔標示，不提供可展開的事件細節。
+
 **為什麼這樣做**：Atlas 想接近 opencode 這類 terminal-first agent 的使用感，但第一版先保持單欄與少量提示，避免加入 theme、autocomplete、diff viewer 或多 session 造成複雜度。
 
 **影響與取捨**：畫面會比原本最小 Textual 殼更清楚，也更適合鍵盤操作；取捨是目前還不是完整 opencode clone，status bar 也先維持最小資訊。

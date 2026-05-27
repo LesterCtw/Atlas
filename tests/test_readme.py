@@ -19,6 +19,15 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("header", readme)
         self.assertIn("status bar", readme)
 
+    def test_readme_explains_tui_transcript_labels(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("transcript", readme)
+        self.assertIn("`User：`", readme)
+        self.assertIn("`Atlas：`", readme)
+        self.assertIn("`狀態：`", readme)
+        self.assertIn("`Error：`", readme)
+
     def test_readme_explains_tool_call_protocol_and_fake_adapter_testing(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

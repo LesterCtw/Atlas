@@ -72,7 +72,7 @@ class AtlasApp(App[None]):
 
     def on_mount(self) -> None:
         messages = self.query_one("#messages", RichLog)
-        messages.write("Atlas 已啟動。")
+        messages.write("Atlas：已啟動。")
         self.query_one("#prompt", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -84,7 +84,7 @@ class AtlasApp(App[None]):
         messages = self.query_one("#messages", RichLog)
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
-            messages.write(result.message)
+            messages.write(f"Atlas：{result.message}")
             if result.action == "inject-skill" and result.injected_message is not None:
                 if self.fake_adapter is not None:
                     self.fake_adapter.inject(result.injected_message)
@@ -92,7 +92,7 @@ class AtlasApp(App[None]):
                 self.exit()
             return
 
-        messages.write(f"> {prompt}")
+        messages.write(f"User：{prompt}")
         if self.fake_adapter is None:
             return
 
@@ -104,6 +104,6 @@ class AtlasApp(App[None]):
         for status_event in result.status_events:
             messages.write(STATUS_MESSAGES.get(status_event, f"狀態：{status_event}"))
         if result.error is not None:
-            messages.write(result.error.message)
+            messages.write(f"Error：{result.error.message}")
         if result.final_response is not None:
-            messages.write(result.final_response)
+            messages.write(f"Atlas：{result.final_response}")

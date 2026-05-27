@@ -64,6 +64,20 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(prompt.value, "")
                 self.assertIs(pilot.app.focused, prompt)
 
+    async def test_transcript_labels_startup_and_user_prompt(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "say hello"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Atlas：已啟動。", messages)
+                self.assertIn("User：say hello", messages)
+
     async def test_app_keeps_prompt_focused_after_slash_command(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
@@ -76,6 +90,19 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(prompt.value, "")
                 self.assertIs(pilot.app.focused, prompt)
+
+    async def test_transcript_labels_slash_command_output_as_atlas_output(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/help"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Atlas：可用命令", messages)
 
     async def test_prompt_placeholder_mentions_prompt_and_slash_commands(self) -> None:
         with TemporaryDirectory() as directory:
@@ -116,6 +143,55 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("執行 tool", messages)
                 self.assertIn("收到最終回覆", messages)
                 self.assertIn("Final answer: hello", messages)
+
+    async def test_transcript_labels_final_response_as_atlas_output(self) -> None:
+        adapter = FakeTgenieAdapter(
+            responses=[
+                """```json
+{"type": "atlas.tool_call", "tool": "echo", "args": {"text": "hello"}}
+```""",
+                "Final answer: hello",
+            ]
+        )
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "say hello"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Atlas：Final answer: hello", messages)
+
+    async def test_transcript_labels_tool_call_errors(self) -> None:
+        adapter = FakeTgenieAdapter(
+            responses=[
+                """```json
+{"type": "atlas.tool_call",
+```""",
+            ]
+        )
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "run bad tool call"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Error：Tool call JSON 格式錯誤", messages)
 
     async def test_skill_command_injects_instructions_into_fake_adapter(self) -> None:
         adapter = FakeTgenieAdapter(responses=[])
