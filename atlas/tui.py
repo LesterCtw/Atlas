@@ -90,6 +90,7 @@ class AtlasApp(App[None]):
         self.fake_adapter = fake_adapter
         self.slash_options: list[str] = []
         self.selected_slash_index = 0
+        self._transcript_group: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
@@ -103,8 +104,13 @@ class AtlasApp(App[None]):
             select_on_focus=False,
         )
 
-    def _write_transcript(self, renderable: object) -> None:
+    def _write_transcript(self, renderable: object, group: str | None = None) -> None:
         messages = self.query_one("#messages", RichLog)
+        if group is not None and group != self._transcript_group:
+            rule_width = self._transcript_rule_width()
+            rule = Text("─" * rule_width, style="#243244")
+            messages.write(rule, width=rule_width)
+            self._transcript_group = group
         messages.write(renderable)
 
     def _transcript_rule_width(self) -> int:
@@ -114,12 +120,7 @@ class AtlasApp(App[None]):
         return max(1, messages.scrollable_content_region.width or fallback_width)
 
     def _write_agent_output(self, renderable: object) -> None:
-        messages = self.query_one("#messages", RichLog)
-        rule_width = self._transcript_rule_width()
-        rule = Text("─" * rule_width, style="#243244")
-        messages.write(rule, width=rule_width)
-        messages.write(renderable)
-        messages.write(rule, width=rule_width)
+        self._write_transcript(renderable, group="atlas")
 
     def _format_user_prompt(self, prompt: str) -> Text:
         return Text.assemble(
@@ -220,7 +221,7 @@ class AtlasApp(App[None]):
                 self.exit()
             return
 
-        self._write_transcript(self._format_user_prompt(prompt))
+        self._write_transcript(self._format_user_prompt(prompt), group="user")
         if self.fake_adapter is None:
             return
 

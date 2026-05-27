@@ -76,7 +76,7 @@ Atlas TUI 目前使用單欄深色 TUI，TUI 畫面文案使用英文：上方 h
 
 TUI 採鍵盤優先操作。滑鼠點 transcript 不會讓 transcript 取得 focus，點輸入框也不會改變框線 highlight；這樣可以避免滑鼠操作造成多餘的視覺狀態。輸入 `/` 時會顯示 slash command 選單，可以用上下方向鍵選擇 `/help`、`/exit` 或現有 skills，例如 `/llm-wiki`、`/skill-creator`。
 
-中間訊息區是簡潔 transcript，訊息區保留適度 padding，但不會在每則訊息後強制加空行。畫面用不同色塊分割 header、transcript、slash 選單和輸入框，不使用邊框。Atlas 發言和使用者發言都留在同一個 transcript 色塊裡，不再用訊息背景色塊分開；transcript 會用固定前綴區分不同內容，並用延伸到訊息區可用寬度的水平線分隔對話項目：
+中間訊息區是簡潔 transcript，訊息區保留適度 padding，但不會在每則訊息後強制加空行。畫面用不同色塊分割 header、transcript、slash 選單和輸入框，不使用邊框。Atlas 發言和使用者發言都留在同一個 transcript 色塊裡，不再用訊息背景色塊分開；transcript 會用固定前綴區分不同內容，並用延伸到訊息區可用寬度的水平線分隔不同發言者區塊。同一個來源連續輸出時會留在同一個區塊，例如連續 Atlas 訊息之間不會再插入水平線：
 
 - `› You  prompt`：你送出的 prompt，使用者輸入會用亮色前綴與粗體文字標示，不使用背景色塊。
 - `Atlas:`：Atlas 啟動訊息、slash command 回覆，或模型最後回覆。
@@ -85,7 +85,7 @@ TUI 採鍵盤優先操作。滑鼠點 transcript 不會讓 transcript 取得 foc
 
 **為什麼這樣做**：用文字前綴即可讓 prompt、回覆、狀態和錯誤容易掃描，不需要把 TUI 做成聊天卡片或完整 event inspector。
 
-**影響與取捨**：transcript 會比純文字 log 更清楚，也比較容易測試；使用者輸入會更醒目，Atlas 輸出也會被水平線清楚隔開。取捨是第一版只提供簡潔標示，不提供可展開的事件細節。
+**影響與取捨**：transcript 會比純文字 log 更清楚，也比較容易測試；使用者輸入會更醒目，不同發言者區塊也會被水平線清楚隔開。取捨是連續 Atlas 輸出會合併成同一區塊，視覺上更像同一段回覆，但不會逐筆框出每個系統訊息。
 
 **為什麼這樣做**：Atlas 想接近 opencode 這類 terminal-first agent 的使用感，但第一版先保持單欄與少量提示，避免加入 theme、autocomplete、diff viewer 或多 session 造成複雜度。
 

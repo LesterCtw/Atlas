@@ -44,7 +44,8 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("不再用訊息背景色塊分開", readme)
         self.assertIn("不使用背景色塊", readme)
         self.assertIn("不使用邊框", readme)
-        self.assertIn("延伸到訊息區可用寬度的水平線分隔對話項目", readme)
+        self.assertIn("延伸到訊息區可用寬度的水平線分隔不同發言者區塊", readme)
+        self.assertIn("連續 Atlas 訊息之間不會再插入水平線", readme)
 
     def test_readme_explains_tool_call_protocol_and_fake_adapter_testing(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

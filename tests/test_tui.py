@@ -19,6 +19,10 @@ def screenshot_text(svg: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", svg)).replace("\xa0", " ")
 
 
+def is_horizontal_rule(line: str) -> bool:
+    return bool(line) and set(line) == {"─"}
+
+
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
     async def test_app_shows_header_messages_and_prompt_input(self) -> None:
         with TemporaryDirectory() as directory:
@@ -241,6 +245,33 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
                 self.assertIn("Atlas: Available commands", messages)
+
+    async def test_consecutive_atlas_outputs_share_one_transcript_block(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/help"
+                await prompt.action_submit()
+                prompt.value = "/missing"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                lines = messages.splitlines()
+                help_index = next(
+                    index
+                    for index, line in enumerate(lines)
+                    if line.startswith("Atlas: Available commands")
+                )
+                missing_index = next(
+                    index
+                    for index, line in enumerate(lines)
+                    if line.startswith("Atlas: Unknown skill")
+                )
+
+                self.assertFalse(any(is_horizontal_rule(line) for line in lines[help_index + 1 : missing_index]))
 
     async def test_focused_empty_prompt_does_not_render_placeholder_text(self) -> None:
         with TemporaryDirectory() as directory:
