@@ -35,7 +35,7 @@ class ToolProtocolTests(unittest.TestCase):
 
         self.assertIsInstance(result, ToolCallError)
         self.assertEqual(result.code, "malformed-json")
-        self.assertIn("重送", result.message)
+        self.assertIn("valid JSON", result.message)
 
     def test_rejects_unknown_tool_name(self) -> None:
         model_response = """```json
@@ -108,7 +108,7 @@ class ToolProtocolTests(unittest.TestCase):
 
         self.assertIsInstance(result, ToolCallError)
         self.assertEqual(result.code, "multiple-tool-calls")
-        self.assertIn("單一", result.message)
+        self.assertIn("single", result.message)
 
 
 if __name__ == "__main__":

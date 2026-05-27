@@ -23,13 +23,13 @@ def handle_slash_command(
         if skill_loader is not None:
             names = skill_loader.list_names()
             if names:
-                skill_commands = " Skills：" + "、".join(f"/{name}" for name in names) + "。"
+                skill_commands = " Skills: " + ", ".join(f"/{name}" for name in names) + "."
         return SlashCommandResult(
             action="message",
-            message="可用命令：/help 顯示說明、/exit 結束 Atlas。" + skill_commands,
+            message="Available commands: /help for help, /exit to quit Atlas." + skill_commands,
         )
     if command == "/exit":
-        return SlashCommandResult(action="exit", message="正在結束 Atlas。")
+        return SlashCommandResult(action="exit", message="Exiting Atlas.")
     if skill_loader is not None and command.startswith("/"):
         skill_name = command.removeprefix("/")
         try:
@@ -37,12 +37,12 @@ def handle_slash_command(
         except SkillNotFound:
             return SlashCommandResult(
                 action="message",
-                message=f"未知 skill：{skill_name}。輸入 /help 查看可用命令。",
+                message=f"Unknown skill: {skill_name}. Type /help to see available commands.",
             )
-        message = f"已載入 skill：{skill.name}"
+        message = f"Loaded skill: {skill.name}"
         if skill.name == "llm-wiki":
             initialize_wiki(skill_loader.workspace)
-            message = f"已初始化 LLM Wiki；已載入 skill：{skill.name}"
+            message = f"Initialized LLM Wiki; loaded skill: {skill.name}"
         return SlashCommandResult(
             action="inject-skill",
             message=message,
@@ -50,7 +50,7 @@ def handle_slash_command(
         )
     return SlashCommandResult(
         action="message",
-        message=f"未知命令：{command}。輸入 /help 查看可用命令。",
+        message=f"Unknown command: {command}. Type /help to see available commands.",
     )
 
 

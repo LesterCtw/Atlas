@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.widgets import Input, RichLog, Static
@@ -12,13 +13,13 @@ from atlas.skills import SkillLoader
 
 
 STATUS_MESSAGES = {
-    "waiting-for-model": "狀態：等待模型回覆",
-    "parsing-tool-call": "狀態：解析 tool call",
-    "executing-tool": "狀態：執行 tool",
-    "final-response": "狀態：收到最終回覆",
-    "error": "狀態：tool call 錯誤",
+    "waiting-for-model": "Status: Waiting for model",
+    "parsing-tool-call": "Status: Parsing tool call",
+    "executing-tool": "Status: Executing tool",
+    "final-response": "Status: Final response",
+    "error": "Status: Tool call error",
 }
-STATUS_HINTS = "Enter 送出  |  /help 說明  |  /exit 離開"
+STATUS_HINTS = "Enter Submit  |  /help Help  |  /exit Exit"
 
 
 class AtlasApp(App[None]):
@@ -31,27 +32,29 @@ class AtlasApp(App[None]):
 
     #header {
         height: 1;
-        padding: 0 1;
+        padding: 0 2;
         background: #111820;
         color: #d6deeb;
     }
 
     #messages {
         height: 1fr;
-        padding: 0 1;
+        padding: 1 2;
         border: solid #243244;
         background: #0b0f14;
         color: #d6deeb;
     }
 
     #prompt {
+        height: 3;
+        padding: 1 2;
         background: #0f151d;
         color: #e6edf3;
     }
 
     #status {
         height: 1;
-        padding: 0 1;
+        padding: 0 2;
         background: #111820;
         color: #8fa3b8;
     }
@@ -70,11 +73,11 @@ class AtlasApp(App[None]):
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
         yield RichLog(id="messages", wrap=True)
         yield Input(
-            placeholder="輸入 prompt 或 slash command，例如 /help",
+            placeholder="Enter a prompt or slash command, e.g. /help",
             id="prompt",
             select_on_focus=False,
         )
-        yield Static(self._format_status("狀態：待命"), id="status")
+        yield Static(self._format_status("Status: Idle"), id="status")
 
     def _format_status(self, message: str) -> str:
         return f"{message}  |  {STATUS_HINTS}"
@@ -82,9 +85,19 @@ class AtlasApp(App[None]):
     def _set_status(self, message: str) -> None:
         self.query_one("#status", Static).update(self._format_status(message))
 
-    def on_mount(self) -> None:
+    def _write_transcript(self, renderable: object) -> None:
         messages = self.query_one("#messages", RichLog)
-        messages.write("Atlas：已啟動。")
+        messages.write(renderable)
+        messages.write("")
+
+    def _format_user_prompt(self, prompt: str) -> Text:
+        return Text.assemble(
+            ("› ", "bold #7dd3fc"),
+            (prompt, "bold #f8fafc on #1f2937"),
+        )
+
+    def on_mount(self) -> None:
+        self._write_transcript("Atlas: Ready.")
         self.query_one("#prompt", Input).focus()
 
     def on_key(self, event: events.Key) -> None:
@@ -103,10 +116,9 @@ class AtlasApp(App[None]):
         if not prompt:
             return
 
-        messages = self.query_one("#messages", RichLog)
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
-            messages.write(f"Atlas：{result.message}")
+            self._write_transcript(f"Atlas: {result.message}")
             if result.action == "inject-skill" and result.injected_message is not None:
                 if self.fake_adapter is not None:
                     self.fake_adapter.inject(result.injected_message)
@@ -114,21 +126,23 @@ class AtlasApp(App[None]):
                 self.exit()
             return
 
-        messages.write(f"User：{prompt}")
+        self._write_transcript(self._format_user_prompt(prompt))
         if self.fake_adapter is None:
             return
 
+        messages = self.query_one("#messages", RichLog)
         result = run_fake_tool_loop(
             initial_prompt=prompt,
             adapter=self.fake_adapter,
             tools={"echo": lambda args: {"text": args.get("text", "")}},
         )
         for status_event in result.status_events:
-            status_message = STATUS_MESSAGES.get(status_event, f"狀態：{status_event}")
+            status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
             messages.write(status_message)
+            messages.write("")
             self._set_status(status_message)
         if result.error is not None:
             self._set_status(STATUS_MESSAGES["error"])
-            messages.write(f"Error：{result.error.message}")
+            self._write_transcript(f"Error: {result.error.message}")
         if result.final_response is not None:
-            messages.write(f"Atlas：{result.final_response}")
+            self._write_transcript(f"Atlas: {result.final_response}")

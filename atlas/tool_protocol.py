@@ -37,7 +37,7 @@ def parse_tool_call(
         except json.JSONDecodeError:
             return ToolCallError(
                 code="malformed-json",
-                message="Tool call JSON 格式錯誤，請重送單一合法的 Atlas tool call。",
+                message="Tool call JSON is invalid. Send one valid JSON Atlas tool call.",
             )
         if isinstance(payload, dict) and payload.get("type") == TOOL_CALL_TYPE:
             tool_payloads.append(payload)
@@ -45,7 +45,7 @@ def parse_tool_call(
     if len(tool_payloads) > 1:
         return ToolCallError(
             code="multiple-tool-calls",
-            message="一次只能執行單一 Atlas tool call，請拆成下一輪再重送。",
+            message="Only a single Atlas tool call can run at a time. Send the next call in a later turn.",
         )
 
     if len(tool_payloads) == 1:
@@ -53,24 +53,24 @@ def parse_tool_call(
         if "tool" not in payload:
             return ToolCallError(
                 code="missing-tool",
-                message="Tool call 缺少 tool name，請重送完整 tool call。",
+                message="Tool call is missing a tool name. Send a complete tool call.",
             )
         tool = payload["tool"]
         if available_tools is not None and tool not in available_tools:
             return ToolCallError(
                 code="unknown-tool",
-                message=f"未知工具：{tool}。請改用 Atlas 目前支援的工具。",
+                message=f"Unknown tool: {tool}. Use one of the tools currently supported by Atlas.",
             )
         if "args" not in payload:
             return ToolCallError(
                 code="missing-args",
-                message="Tool call 缺少 args object，請重送完整參數。",
+                message="Tool call is missing an args object. Send complete arguments.",
             )
         args = payload["args"]
         if not isinstance(args, dict):
             return ToolCallError(
                 code="invalid-args",
-                message="Tool call 的 args 必須是 JSON object。",
+                message="Tool call args must be a JSON object.",
             )
         return ToolCall(tool=tool, args=args)
 

@@ -20,15 +20,17 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("header", readme)
         self.assertIn("status bar", readme)
         self.assertIn("status bar 會顯示目前 tool loop 狀態", readme)
+        self.assertIn("TUI 畫面文案使用英文", readme)
 
     def test_readme_explains_tui_transcript_labels(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
         self.assertIn("transcript", readme)
-        self.assertIn("`User：`", readme)
-        self.assertIn("`Atlas：`", readme)
-        self.assertIn("`狀態：`", readme)
-        self.assertIn("`Error：`", readme)
+        self.assertIn("`› prompt`", readme)
+        self.assertIn("`Atlas:`", readme)
+        self.assertIn("`Status:`", readme)
+        self.assertIn("`Error:`", readme)
+        self.assertIn("使用者輸入會用 highlight 樣式顯示", readme)
 
     def test_readme_explains_tool_call_protocol_and_fake_adapter_testing(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

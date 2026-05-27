@@ -10,7 +10,7 @@ from textual.widgets import Input, RichLog, Static
 
 
 def rich_log_text(log: RichLog) -> str:
-    return "\n".join(str(line) for line in log.lines)
+    return "\n".join("".join(segment.text for segment in line) for line in log.lines)
 
 
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
@@ -36,7 +36,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 status = str(pilot.app.query_one("#status", Static).render())
-                self.assertIn("狀態", status)
+                self.assertIn("Status", status)
                 self.assertIn("Enter", status)
                 self.assertIn("/help", status)
                 self.assertIn("/exit", status)
@@ -90,8 +90,9 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Atlas：已啟動。", messages)
-                self.assertIn("User：say hello", messages)
+                self.assertIn("Atlas: Ready.", messages)
+                self.assertIn("› say hello", messages)
+                self.assertIn("Atlas: Ready.\n\n› say hello", messages)
 
     async def test_app_keeps_prompt_focused_after_slash_command(self) -> None:
         with TemporaryDirectory() as directory:
@@ -117,7 +118,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Atlas：可用命令", messages)
+                self.assertIn("Atlas: Available commands", messages)
 
     async def test_prompt_placeholder_mentions_prompt_and_slash_commands(self) -> None:
         with TemporaryDirectory() as directory:
@@ -153,10 +154,10 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("等待模型回覆", messages)
-                self.assertIn("解析 tool call", messages)
-                self.assertIn("執行 tool", messages)
-                self.assertIn("收到最終回覆", messages)
+                self.assertIn("Waiting for model", messages)
+                self.assertIn("Parsing tool call", messages)
+                self.assertIn("Executing tool", messages)
+                self.assertIn("Final response", messages)
                 self.assertIn("Final answer: hello", messages)
 
     async def test_status_footer_reflects_latest_fake_tool_loop_status(self) -> None:
@@ -182,7 +183,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 status = str(pilot.app.query_one("#status", Static).render())
-                self.assertIn("收到最終回覆", status)
+                self.assertIn("Final response", status)
                 self.assertIn("Enter", status)
                 self.assertIn("/help", status)
                 self.assertIn("/exit", status)
@@ -210,7 +211,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Atlas：Final answer: hello", messages)
+                self.assertIn("Atlas: Final answer: hello", messages)
 
     async def test_transcript_labels_tool_call_errors(self) -> None:
         adapter = FakeTgenieAdapter(
@@ -234,7 +235,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Error：Tool call JSON 格式錯誤", messages)
+                self.assertIn("Error: Tool call JSON is invalid", messages)
 
     async def test_skill_command_injects_instructions_into_fake_adapter(self) -> None:
         adapter = FakeTgenieAdapter(responses=[])
@@ -252,7 +253,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("已載入 skill：llm-wiki", messages)
+                self.assertIn("loaded skill: llm-wiki", messages)
 
         self.assertEqual(len(adapter.sent_messages), 1)
         self.assertIn('<atlas.skill_instructions name="llm-wiki">', adapter.sent_messages[0])
@@ -274,7 +275,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("已載入 skill：skill-creator", messages)
+                self.assertIn("Loaded skill: skill-creator", messages)
 
         self.assertEqual(len(adapter.sent_messages), 1)
         self.assertIn('<atlas.skill_instructions name="skill-creator">', adapter.sent_messages[0])

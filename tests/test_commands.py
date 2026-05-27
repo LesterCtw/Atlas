@@ -40,13 +40,13 @@ class SlashCommandTests(unittest.TestCase):
         result = handle_slash_command("/exit")
 
         self.assertEqual(result.action, "exit")
-        self.assertIn("結束", result.message)
+        self.assertIn("Exiting", result.message)
 
     def test_unknown_slash_command_returns_clear_error(self) -> None:
         result = handle_slash_command("/missing")
 
         self.assertEqual(result.action, "message")
-        self.assertIn("未知命令", result.message)
+        self.assertIn("Unknown command", result.message)
         self.assertIn("/missing", result.message)
 
     def test_builtin_skill_command_returns_injected_instructions(self) -> None:
@@ -56,7 +56,7 @@ class SlashCommandTests(unittest.TestCase):
             result = handle_slash_command("/llm-wiki", skill_loader=loader)
 
         self.assertEqual(result.action, "inject-skill")
-        self.assertIn("已載入 skill：llm-wiki", result.message)
+        self.assertIn("loaded skill: llm-wiki", result.message)
         self.assertIsNotNone(result.injected_message)
         self.assertIn('<atlas.skill_instructions name="llm-wiki">', result.injected_message)
         self.assertIn("LLM Wiki", result.injected_message)
@@ -72,7 +72,7 @@ class SlashCommandTests(unittest.TestCase):
             self.assertTrue((workspace / "wiki" / "raw-sources").is_dir())
 
         self.assertEqual(result.action, "inject-skill")
-        self.assertIn("已初始化 LLM Wiki", result.message)
+        self.assertIn("Initialized LLM Wiki", result.message)
         self.assertIsNotNone(result.injected_message)
 
     def test_workspace_skill_command_returns_injected_instructions(self) -> None:
@@ -89,7 +89,7 @@ class SlashCommandTests(unittest.TestCase):
             result = handle_slash_command("/repair-notes", skill_loader=loader)
 
         self.assertEqual(result.action, "inject-skill")
-        self.assertIn("已載入 skill：repair-notes", result.message)
+        self.assertIn("Loaded skill: repair-notes", result.message)
         self.assertIsNotNone(result.injected_message)
         self.assertIn('<atlas.skill_instructions name="repair-notes">', result.injected_message)
         self.assertIn("Summarize repair notes.", result.injected_message)
@@ -101,7 +101,7 @@ class SlashCommandTests(unittest.TestCase):
             result = handle_slash_command("/missing", skill_loader=loader)
 
         self.assertEqual(result.action, "message")
-        self.assertIn("未知 skill", result.message)
+        self.assertIn("Unknown skill", result.message)
         self.assertIn("missing", result.message)
         self.assertIsNone(result.injected_message)
 
@@ -120,7 +120,7 @@ class SlashCommandTests(unittest.TestCase):
             result = handle_slash_command("/../../secret", skill_loader=loader)
 
         self.assertEqual(result.action, "message")
-        self.assertIn("未知 skill", result.message)
+        self.assertIn("Unknown skill", result.message)
         self.assertIsNone(result.injected_message)
 
 
