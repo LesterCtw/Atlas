@@ -51,6 +51,21 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 prompt = pilot.app.query_one("#prompt", Input)
                 self.assertIs(pilot.app.focused, prompt)
 
+    async def test_typing_while_transcript_is_focused_returns_to_prompt(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                messages = pilot.app.query_one("#messages", RichLog)
+                prompt = pilot.app.query_one("#prompt", Input)
+                pilot.app.set_focus(messages)
+
+                await pilot.press("h", "i")
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "hi")
+                self.assertIs(pilot.app.focused, prompt)
+
     async def test_app_keeps_prompt_focused_after_prompt_submission(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
@@ -143,6 +158,34 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("執行 tool", messages)
                 self.assertIn("收到最終回覆", messages)
                 self.assertIn("Final answer: hello", messages)
+
+    async def test_status_footer_reflects_latest_fake_tool_loop_status(self) -> None:
+        adapter = FakeTgenieAdapter(
+            responses=[
+                """```json
+{"type": "atlas.tool_call", "tool": "echo", "args": {"text": "hello"}}
+```""",
+                "Final answer: hello",
+            ]
+        )
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "say hello"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                status = str(pilot.app.query_one("#status", Static).render())
+                self.assertIn("收到最終回覆", status)
+                self.assertIn("Enter", status)
+                self.assertIn("/help", status)
+                self.assertIn("/exit", status)
 
     async def test_transcript_labels_final_response_as_atlas_output(self) -> None:
         adapter = FakeTgenieAdapter(

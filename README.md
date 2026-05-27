@@ -66,9 +66,9 @@ uv run atlas
 uv run atlas <workspace-path>
 ```
 
-TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不需要用滑鼠點選。
+TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不用點選輸入框。如果焦點跑到 transcript，直接開始打字也會回到輸入框。
 
-Atlas TUI 目前使用單欄深色 TUI：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。
+Atlas TUI 目前使用單欄深色 TUI：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框與 status bar。status bar 會提示 `Enter`、`/help`、`/exit` 和目前狀態。status bar 會顯示目前 tool loop 狀態，例如等待模型、解析 tool call、執行 tool、收到最終回覆或 tool call 錯誤。
 
 中間訊息區是簡潔 transcript，會用固定前綴區分不同內容：
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.widgets import Input, RichLog, Static
 
@@ -17,6 +18,7 @@ STATUS_MESSAGES = {
     "final-response": "狀態：收到最終回覆",
     "error": "狀態：tool call 錯誤",
 }
+STATUS_HINTS = "Enter 送出  |  /help 說明  |  /exit 離開"
 
 
 class AtlasApp(App[None]):
@@ -67,13 +69,33 @@ class AtlasApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
         yield RichLog(id="messages", wrap=True)
-        yield Input(placeholder="輸入 prompt 或 slash command，例如 /help", id="prompt")
-        yield Static("狀態：待命  |  Enter 送出  |  /help 說明  |  /exit 離開", id="status")
+        yield Input(
+            placeholder="輸入 prompt 或 slash command，例如 /help",
+            id="prompt",
+            select_on_focus=False,
+        )
+        yield Static(self._format_status("狀態：待命"), id="status")
+
+    def _format_status(self, message: str) -> str:
+        return f"{message}  |  {STATUS_HINTS}"
+
+    def _set_status(self, message: str) -> None:
+        self.query_one("#status", Static).update(self._format_status(message))
 
     def on_mount(self) -> None:
         messages = self.query_one("#messages", RichLog)
         messages.write("Atlas：已啟動。")
         self.query_one("#prompt", Input).focus()
+
+    def on_key(self, event: events.Key) -> None:
+        prompt = self.query_one("#prompt", Input)
+        if self.focused is prompt or event.character is None or not event.is_printable:
+            return
+
+        self.set_focus(prompt)
+        prompt.insert_text_at_cursor(event.character)
+        event.prevent_default()
+        event.stop()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         prompt = event.value.strip()
@@ -102,8 +124,11 @@ class AtlasApp(App[None]):
             tools={"echo": lambda args: {"text": args.get("text", "")}},
         )
         for status_event in result.status_events:
-            messages.write(STATUS_MESSAGES.get(status_event, f"狀態：{status_event}"))
+            status_message = STATUS_MESSAGES.get(status_event, f"狀態：{status_event}")
+            messages.write(status_message)
+            self._set_status(status_message)
         if result.error is not None:
+            self._set_status(STATUS_MESSAGES["error"])
             messages.write(f"Error：{result.error.message}")
         if result.final_response is not None:
             messages.write(f"Atlas：{result.final_response}")

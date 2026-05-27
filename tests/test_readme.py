@@ -15,9 +15,11 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("atlas <workspace-path>", readme)
         self.assertIn("預設 workspace 是目前資料夾", readme)
         self.assertIn("啟動後會自動聚焦輸入框", readme)
+        self.assertIn("不用點選輸入框", readme)
         self.assertIn("單欄深色 TUI", readme)
         self.assertIn("header", readme)
         self.assertIn("status bar", readme)
+        self.assertIn("status bar 會顯示目前 tool loop 狀態", readme)
 
     def test_readme_explains_tui_transcript_labels(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
