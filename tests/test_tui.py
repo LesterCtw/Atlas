@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 
 from atlas.fake_loop import FakeTgenieAdapter
 from atlas.tui import AtlasApp
+from rich.cells import cell_len
 from textual.widgets import Input, RichLog, Static
 
 
@@ -21,6 +22,11 @@ def screenshot_text(svg: str) -> str:
 
 def is_horizontal_rule(line: str) -> bool:
     return bool(line) and set(line) == {"─"}
+
+
+def rich_color_tuple(segment: object) -> tuple[int, int, int]:
+    color = segment.style.color.triplet
+    return (color.red, color.green, color.blue)
 
 
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
@@ -97,9 +103,26 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 cursor_color = cursor_style.bgcolor.triplet
                 self.assertEqual(
                     (cursor_color.red, cursor_color.green, cursor_color.blue),
-                    (15, 21, 29),
+                    (20, 20, 20),
                 )
                 self.assertTrue(cursor_style.underline)
+
+    async def test_prompt_cursor_offset_stays_at_text_end_for_cjk_ime(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "中文輸入，"
+                prompt.cursor_position = len(prompt.value)
+                await pilot.pause()
+
+                self.assertEqual(
+                    prompt.cursor_screen_offset.x,
+                    prompt.content_region.x + cell_len(prompt.value),
+                )
 
     async def test_mouse_focus_does_not_create_box_highlight(self) -> None:
         with TemporaryDirectory() as directory:
@@ -188,6 +211,10 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual("".join(segment.text for segment in user_line), "› You  say hello")
                 for segment in user_line:
                     self.assertIsNone(segment.style.bgcolor)
+                user_segments = list(user_line)
+                self.assertEqual(rich_color_tuple(user_segments[0]), (0, 153, 255))
+                self.assertEqual(rich_color_tuple(user_segments[2]), (153, 153, 153))
+                self.assertEqual(rich_color_tuple(user_segments[3]), (255, 255, 255))
 
     async def test_prompt_text_is_visible_while_typing(self) -> None:
         with TemporaryDirectory() as directory:
@@ -219,6 +246,64 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertEqual(prompt.value, "")
                 self.assertIn("你好啊", pilot.app.export_screenshot())
+
+    async def test_shift_enter_inserts_newline_without_submitting_prompt(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                await pilot.press("h", "i", "shift+enter", "t", "h", "e", "r", "e")
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "hi\nthere")
+                screenshot = screenshot_text(pilot.app.export_screenshot())
+                self.assertIn("hi", screenshot)
+                self.assertIn("there", screenshot)
+                self.assertNotIn("› You  hi", rich_log_text(pilot.app.query_one("#messages", RichLog)))
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "")
+                self.assertIn("› You  hi", messages)
+                self.assertIn("there", messages)
+
+    async def test_empty_prompt_can_browse_submitted_prompt_history(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "first prompt"
+                await prompt.action_submit()
+                prompt.value = "second prompt"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "")
+
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertEqual(prompt.value, "second prompt")
+
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertEqual(prompt.value, "first prompt")
+
+                await pilot.press("down")
+                await pilot.pause()
+                self.assertEqual(prompt.value, "second prompt")
+
+                await pilot.press("down")
+                await pilot.pause()
+                self.assertEqual(prompt.value, "")
+
+                prompt.value = "draft"
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertEqual(prompt.value, "draft")
 
     async def test_app_keeps_prompt_focused_after_slash_command(self) -> None:
         with TemporaryDirectory() as directory:
@@ -301,6 +386,9 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("/help", suggestion_text)
                 self.assertIn("/llm-wiki", suggestion_text)
                 self.assertIn("/skill-creator", suggestion_text)
+                selected_marker_style = suggestions.render().spans[0].style
+                self.assertEqual(selected_marker_style.foreground.rgb, (0, 153, 255))
+                self.assertEqual(selected_marker_style.background.rgb, (28, 28, 28))
 
     async def test_slash_suggestions_support_keyboard_selection(self) -> None:
         with TemporaryDirectory() as directory:

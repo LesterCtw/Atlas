@@ -66,13 +66,13 @@ uv run atlas
 uv run atlas <workspace-path>
 ```
 
-TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不用點選輸入框。如果焦點跑到 transcript，直接開始打字也會回到輸入框。輸入框維持 3 行高度，輸入英文或中文時都會直接顯示在底部欄位，但不會佔太多畫面。
+TUI 啟動後會自動聚焦輸入框，可以直接輸入 prompt 或 slash command；送出後也會回到輸入框，不用點選輸入框。如果焦點跑到 transcript，直接開始打字也會回到輸入框。輸入框維持 3 行高度，輸入英文或中文時都會直接顯示在底部欄位，但不會佔太多畫面。輸入 prompt 時按 `Shift+Enter` 可以插入換行，按 `Enter` 才會送出。當輸入框是空白且 slash command 選單沒有開啟時，可以用上下方向鍵瀏覽過去送出的文字；`Up` 會找較舊的內容，`Down` 會找較新的內容，回到最新後會清空輸入框。
 
 輸入框刻意不放 placeholder。macOS 中文 IME 在還沒按 Enter 選字前，composition 文字可能會先畫在 terminal 上；如果輸入框底下同時有 placeholder，就可能看到 `Enter...` 的第一個 `E` 和中文疊在一起。現在 slash command 提示改成輸入 `/` 時才出現的選單，避免中文輸入時疊字。
 
-輸入框游標使用 underline，不使用白色 block cursor。這樣做是為了避免中文輸入時，閃爍白框把正在輸入的文字視覺切開。
+輸入框游標使用 underline，不使用白色 block cursor。這樣做是為了避免中文輸入時，閃爍白框把正在輸入的文字視覺切開。Atlas 也會把 terminal cursor 對齊文字插入點，避免 macOS 中文 IME 還在 composition 階段時，預組字和前面的文字中間被多隔一格。
 
-Atlas TUI 目前使用單欄深色 TUI，TUI 畫面文案使用英文：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框。header 使用上下對稱 padding，避免文字貼齊 terminal 邊緣或看起來偏上偏下。畫面不保留 footer status bar；tool loop 執行時會直接在 transcript 顯示 `Working:` 狀態，例如 `Waiting for model`、`Parsing tool call`、`Executing tool`、`Final response` 或 `Tool call error`。
+Atlas TUI 目前使用單欄深色 TUI，TUI 畫面文案使用英文：上方 header 顯示 Atlas 與目前 workspace，中間是訊息區，底部是輸入框。header 使用上下對稱 padding，避免文字貼齊 terminal 邊緣或看起來偏上偏下。配色參考 [`DESIGN.md`](DESIGN.md)：近黑 canvas、白色主要文字、灰色 muted 文字、charcoal surface，以及單一藍色 `#0099ff` 作為使用者提示與選取狀態。畫面不保留 footer status bar；tool loop 執行時會直接在 transcript 顯示 `Working:` 狀態，例如 `Waiting for model`、`Parsing tool call`、`Executing tool`、`Final response` 或 `Tool call error`。
 
 TUI 採鍵盤優先操作。滑鼠點 transcript 不會讓 transcript 取得 focus，點輸入框也不會改變框線 highlight；這樣可以避免滑鼠操作造成多餘的視覺狀態。輸入 `/` 時會顯示 slash command 選單，可以用上下方向鍵選擇 `/help`、`/exit` 或現有 skills，例如 `/llm-wiki`、`/skill-creator`。
 
