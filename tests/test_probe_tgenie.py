@@ -34,6 +34,8 @@ class ProbeTgenieTests(unittest.TestCase):
         self.assertIn("latest_response_text", observation_keys)
         self.assertIn("smoke_result", observation_keys)
         self.assertEqual(probe.SMOKE_PROMPT, "Atlas smoke test. Reply with exactly: atlas-ok")
+        self.assertTrue(hasattr(probe, "highlight_text_block"))
+        self.assertTrue(hasattr(probe, "clear_text_highlights"))
 
     def test_probe_prefers_stable_candidate_when_raw_selector_is_manual_review(self) -> None:
         probe = load_probe_module()

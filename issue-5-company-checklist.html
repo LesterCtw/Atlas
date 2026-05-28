@@ -258,6 +258,7 @@
         <li>對 send button 再執行 <code>set send_button &lt;send 編號&gt;</code>，新版 probe 會把 stable candidates 寫進報告。</li>
         <li>用新版 probe 的 <code>texts</code> 列出可見文字區塊。</li>
         <li>找到包含 <code>atlas-ok</code> 的最新 assistant 回覆文字區塊。</li>
+        <li>先用 <code>highlight_text &lt;編號&gt;</code> 在 Chrome 高亮候選文字區塊，確認粉紅框線真的圈住 <code>atlas-ok</code> 那段回覆。</li>
         <li>用 <code>set_text latest_response &lt;編號&gt;</code> 記錄它。</li>
         <li>記錄判斷規則：為什麼這一塊是最新 assistant 回覆。</li>
         <li>不要帶出截圖、公司 URL、內部敏感內容。</li>
@@ -296,7 +297,9 @@ note selected_model Gemini-3.1-Pro Preview</code></pre>
       <h3>3. 在 probe 裡補 latest response</h3>
       <p>送出 smoke prompt 並看到 tGenie 回覆 <code>atlas-ok</code> 後，在 probe terminal 輸入：</p>
       <pre><code>texts</code></pre>
-      <p>在輸出中找到包含 <code>atlas-ok</code> 的文字區塊編號，例如 <code>[37]</code>。接著輸入：</p>
+      <p>在輸出中找到包含 <code>atlas-ok</code> 的候選文字區塊編號，例如 <code>[37]</code>。先用高亮確認：</p>
+      <pre><code>highlight_text 37</code></pre>
+      <p>看 Chrome 畫面。如果框錯位置，輸入 <code>clear_highlights</code>，換下一個候選編號再跑 <code>highlight_text</code>。如果粉紅框線圈住的是最新 assistant 回覆的 <code>atlas-ok</code>，再輸入：</p>
       <pre><code>set_text latest_response 37
 note latest_response_text atlas-ok
 note latest_response_rule bottom-most assistant response text block after the smoke prompt
@@ -305,7 +308,8 @@ done</code></pre>
 
       <div class="box warn">
         <strong>注意：</strong>
-        上面的 <code>37</code> 是例子。明天要用 <code>texts</code> 實際列出的編號。
+        上面的 <code>37</code> 是例子。明天要用 <code>texts</code> 實際列出的編號，並用 <code>highlight_text</code> 在 Chrome 確認後才能 <code>set_text</code>。
+        新版 probe 會在本機瀏覽器 DOM 暫時加 <code>data-atlas-probe-text-id</code>，用來穩定找回同一個文字區塊；這不會送回公司系統。
       </div>
 
       <h2>回家後只要帶回這些文字</h2>
@@ -323,6 +327,7 @@ done</code></pre>
 - **latest_response_rule** ...
 - **latest_response_text** ...
 - **smoke_result** ...</code></pre>
+      <p>操作紀錄裡也應該看到 <code>highlight_text</code>。這代表你不是只靠編號猜，而是有在畫面上確認過候選文字區塊。</p>
 
       <h2>如果 texts 找不到 atlas-ok</h2>
       <ol>

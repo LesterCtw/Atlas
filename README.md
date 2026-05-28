@@ -478,6 +478,8 @@ targets
 notes
 list
 texts
+highlight_text <文字區塊編號>
+clear_highlights
 inspect <元素編號>
 set sidebar_toggle <元素編號>
 click <元素編號>
@@ -535,18 +537,21 @@ done
 33. 輸入 `note send_while_generating <生成中 send/stop 狀態>`。
 34. 等回覆完成後輸入 `note send_after_completion <完成後 send 狀態>`。
 35. 輸入 `texts`，列出可見文字區塊。
-36. 找到最新 assistant 回覆，輸入 `set_text latest_response <文字區塊編號>`。
-37. 輸入 `note latest_response_text atlas-ok`。
-38. 輸入 `note latest_response_rule <你如何判斷這是最新 assistant 回覆>`。
-39. 輸入 `note smoke_result success`。
-40. 輸入 `shot`，留一張人工截圖。
-41. 輸入 `done`，結束並輸出報告。
+36. 找到包含 `atlas-ok` 的候選編號，輸入 `highlight_text <文字區塊編號>`。
+37. 看 Chrome 畫面，確認粉紅框線圈住的是最新 assistant 回覆那段文字。
+38. 如果框錯位置，輸入 `clear_highlights`，換下一個包含 `atlas-ok` 或最接近最新回覆的編號再跑 `highlight_text`。
+39. 確認後輸入 `set_text latest_response <文字區塊編號>`；新版 probe 會再高亮一次並記錄。
+40. 輸入 `note latest_response_text atlas-ok`。
+41. 輸入 `note latest_response_rule <你如何判斷這是最新 assistant 回覆>`。
+42. 輸入 `note smoke_result success`。
+43. 輸入 `shot`，留一張人工截圖。
+44. 輸入 `done`，結束並輸出報告。
 
-**這個做法是什麼**：probe 不只記錄 selector，也會用 `inspect` 從元素座標往 DOM 父層找穩定 selector candidates，並用 `notes` 和 `note` 把 #5 需要的人眼觀察寫進報告。
+**這個做法是什麼**：probe 不只記錄 selector，也會用 `inspect` 從元素座標往 DOM 父層找穩定 selector candidates；對 `latest_response` 這種不能點擊的文字區塊，`texts` 會先標上 probe-only id，`highlight_text` 再用這個 id 在 Chrome 畫面上加粉紅框線確認。
 
-**為什麼這樣做**：tGenie 有些狀態是 hover tooltip 或生成中短暫狀態，Playwright 不一定能自動讀到；讓 probe 明確要求你記錄，就不會漏掉。
+**為什麼這樣做**：tGenie 有些狀態是 hover tooltip、生成中短暫狀態，或純文字回覆；Playwright 不一定能自動判斷語意，讓 probe 用 id 找回同一個候選節點並框出來，可以避免只靠 index 或座標猜。
 
-**影響與取捨**：公司畫面和截圖不用帶出來，只要把非敏感文字、selector hint、狀態描述寫進 `tgenie_probe_*.md`。取捨是操作步驟比原本多，但資訊足夠實作 #5 adapter。
+**影響與取捨**：公司畫面和截圖不用帶出來，只要把非敏感文字、selector hint、狀態描述寫進 `tgenie_probe_*.md`。取捨是多一步 `highlight_text` 可視確認，且 probe 會暫時在本機瀏覽器 DOM 加 `data-atlas-probe-text-id`；這只影響當次 probe 頁面，不會送回公司系統。
 
 ### 4. 輸出檔案
 
@@ -635,7 +640,7 @@ py -3.12 -m venv .venv
 - send button 在送出後是否會變成 stop generating。
 - 回覆完成後是否會變回 send。
 - smoke test 送出 `Atlas smoke test. Reply with exactly: atlas-ok` 後，tGenie 回覆 `atlas-ok`。
-- `texts` 能列出最新 assistant 回覆，並可用 `set_text latest_response <編號>` 記錄。
+- `texts` 能列出最新 assistant 回覆，並可用 `highlight_text <編號>` 在 Chrome 高亮確認後，再用 `set_text latest_response <編號>` 記錄。
 
 成功標準：
 
@@ -649,6 +654,8 @@ py -3.12 -m venv .venv
 - 哪個 target 找不到。
 - `list` 輸出的相關元素編號。
 - `texts` 輸出的相關文字區塊編號。
+- `highlight_text <編號>` 是否有在 Chrome 框到候選文字區塊。
+- 如果框錯，記錄錯的編號與最後正確的編號。
 - screenshot。
 - 你手動看到的按鈕文字。
 

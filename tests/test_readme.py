@@ -88,6 +88,8 @@ class ReadmeTests(unittest.TestCase):
 
         self.assertIn("notes", readme)
         self.assertIn("texts", readme)
+        self.assertIn("highlight_text <文字區塊編號>", readme)
+        self.assertIn("clear_highlights", readme)
         self.assertIn("inspect <元素編號>", readme)
         self.assertIn("Stable selector candidates", readme)
         self.assertIn("set_text latest_response", readme)

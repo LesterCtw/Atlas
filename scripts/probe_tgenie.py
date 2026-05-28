@@ -174,6 +174,18 @@ def extract_text_blocks(page: "Page") -> list[dict[str, Any]]:
           }
 
           const candidates = [];
+          window.__atlasProbeTextIdCounter = window.__atlasProbeTextIdCounter || 0;
+
+          function probeTextId(el) {
+            let id = el.getAttribute('data-atlas-probe-text-id');
+            if (!id) {
+              id = `atlas-probe-text-${window.__atlasProbeTextIdCounter}`;
+              window.__atlasProbeTextIdCounter += 1;
+              el.setAttribute('data-atlas-probe-text-id', id);
+            }
+            return id;
+          }
+
           for (const el of nodes) {
             if (!visible(el)) continue;
             const text = cleanText(el.innerText || el.textContent || el.value || '');
@@ -189,6 +201,7 @@ def extract_text_blocks(page: "Page") -> list[dict[str, Any]]:
               title: el.getAttribute('title') || '',
               id: el.id || '',
               testId: el.getAttribute('data-testid') || el.getAttribute('data-test') || el.getAttribute('data-cy') || '',
+              probeTextId: probeTextId(el),
               bbox: {
                 x: Math.round(rect.x),
                 y: Math.round(rect.y),
@@ -267,6 +280,7 @@ def print_text_blocks(text_blocks: list[dict[str, Any]]) -> None:
             f"box={bbox['x']},{bbox['y']},{bbox['width']}x{bbox['height']} "
             f"text={text_preview(block.get('text'), 160)}"
         )
+    print("確認文字區塊時，先輸入 highlight_text <編號>，看 Chrome 畫面上是否框到正確回覆。")
 
 
 def selector_hint(element: dict[str, Any]) -> dict[str, str]:
@@ -529,6 +543,153 @@ def record_text_choice(choices: dict[str, Any], target: str, index: int, block: 
     print(f"已記錄 {target}：{text_preview(block.get('text'), 160)}")
 
 
+def clear_text_highlights(page: "Page") -> int:
+    return page.evaluate(
+        """
+        () => {
+          const highlighted = Array.from(document.querySelectorAll('[data-atlas-probe-highlight="true"]'));
+          for (const el of highlighted) {
+            const originalStyle = el.getAttribute('data-atlas-probe-original-style');
+            if (originalStyle === null) {
+              el.removeAttribute('style');
+            } else {
+              el.setAttribute('style', originalStyle);
+            }
+            el.removeAttribute('data-atlas-probe-highlight');
+            el.removeAttribute('data-atlas-probe-original-style');
+          }
+
+          const badges = Array.from(document.querySelectorAll('[data-atlas-probe-highlight-badge="true"]'));
+          for (const badge of badges) {
+            badge.remove();
+          }
+
+          return highlighted.length + badges.length;
+        }
+        """
+    )
+
+
+def highlight_text_block(page: "Page", block: dict[str, Any], label: str) -> dict[str, Any]:
+    return page.evaluate(
+        """
+        ({selector, block, label}) => {
+          const highlighted = Array.from(document.querySelectorAll('[data-atlas-probe-highlight="true"]'));
+          for (const el of highlighted) {
+            const originalStyle = el.getAttribute('data-atlas-probe-original-style');
+            if (originalStyle === null) {
+              el.removeAttribute('style');
+            } else {
+              el.setAttribute('style', originalStyle);
+            }
+            el.removeAttribute('data-atlas-probe-highlight');
+            el.removeAttribute('data-atlas-probe-original-style');
+          }
+          Array.from(document.querySelectorAll('[data-atlas-probe-highlight-badge="true"]'))
+            .forEach((badge) => badge.remove());
+
+          function visible(el) {
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.visibility !== 'hidden'
+              && style.display !== 'none'
+              && rect.width > 0
+              && rect.height > 0;
+          }
+
+          function cleanText(value) {
+            return (value || '').replace(/\\s+/g, ' ').trim();
+          }
+
+          function roundedBox(el) {
+            const rect = el.getBoundingClientRect();
+            return {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+          }
+
+          function near(actual, expected, tolerance) {
+            return Math.abs(actual - expected) <= tolerance;
+          }
+
+          function sameBox(actual, expected) {
+            return near(actual.x, expected.x, 8)
+              && near(actual.y, expected.y, 8)
+              && near(actual.width, expected.width, 12)
+              && near(actual.height, expected.height, 12);
+          }
+
+          const nodes = Array.from(document.querySelectorAll(selector)).filter(visible);
+          let match = null;
+
+          if (block.probeTextId) {
+            match = nodes.find((el) => el.getAttribute('data-atlas-probe-text-id') === block.probeTextId) || null;
+          }
+
+          if (!match) {
+            for (const el of nodes) {
+              const text = cleanText(el.innerText || el.textContent || el.value || '');
+              if (text !== block.text) continue;
+              if (sameBox(roundedBox(el), block.bbox)) {
+                match = el;
+                break;
+              }
+            }
+          }
+
+          if (!match) {
+            const sameText = nodes.filter((el) => cleanText(el.innerText || el.textContent || el.value || '') === block.text);
+            if (sameText.length === 1) {
+              match = sameText[0];
+            }
+          }
+
+          if (!match) {
+            return {
+              found: false,
+              reason: '找不到同文字與同座標的 DOM 節點；請先 wait 1000，再 texts 重新掃描。',
+            };
+          }
+
+          match.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'instant'});
+          match.setAttribute('data-atlas-probe-original-style', match.getAttribute('style') || '');
+          match.setAttribute('data-atlas-probe-highlight', 'true');
+          match.style.outline = '4px solid #ff0055';
+          match.style.outlineOffset = '4px';
+          match.style.boxShadow = '0 0 0 8px rgba(255, 0, 85, 0.20)';
+          match.style.backgroundColor = 'rgba(255, 245, 0, 0.35)';
+
+          const rect = match.getBoundingClientRect();
+          const badge = document.createElement('div');
+          badge.setAttribute('data-atlas-probe-highlight-badge', 'true');
+          badge.textContent = `Atlas probe: ${label}`;
+          badge.style.position = 'fixed';
+          badge.style.zIndex = '2147483647';
+          badge.style.left = `${Math.max(8, Math.round(rect.left))}px`;
+          badge.style.top = `${Math.max(8, Math.round(rect.top) - 34)}px`;
+          badge.style.padding = '6px 10px';
+          badge.style.border = '2px solid #ff0055';
+          badge.style.borderRadius = '6px';
+          badge.style.background = '#ffffff';
+          badge.style.color = '#111827';
+          badge.style.font = '700 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+          badge.style.boxShadow = '0 8px 24px rgba(17, 24, 39, 0.24)';
+          document.body.appendChild(badge);
+
+          return {
+            found: true,
+            text: cleanText(match.innerText || match.textContent || match.value || ''),
+            bbox: roundedBox(match),
+          };
+        }
+        """,
+        {"selector": TEXT_BLOCK_SELECTOR, "block": block, "label": label},
+    )
+
+
 def click_element(page: "Page", element: dict[str, Any]) -> None:
     bbox = element["bbox"]
     page.mouse.click(bbox["x"] + bbox["width"] / 2, bbox["y"] + bbox["height"] / 2)
@@ -563,9 +724,11 @@ Probe 指令：
   notes                        顯示 #5 必填觀察欄位
   list                         重新列出目前頁面互動元素
   texts                        列出目前頁面可見文字區塊，用來找 latest response
+  highlight_text <index>       在 Chrome 畫面高亮某個文字區塊，確認編號是否正確
+  clear_highlights             清除 probe 加上的文字區塊高亮
   inspect <index>               從元素座標往 DOM 父層找穩定 selector candidates
   set <target> <index>          把某個元素記錄成 target
-  set_text <target> <index>     把某個文字區塊記錄成 target，例如 latest_response
+  set_text <target> <index>     高亮並把某個文字區塊記錄成 target，例如 latest_response
   note <key> <text>             記錄 #5 觀察，例如 note target_model Gemini-3.1-Pro Preview
   click <index>                 點擊某個元素，然後重新掃描
   hover <index>                 滑鼠移到某個元素上，檢查 tooltip / hover title
@@ -602,9 +765,11 @@ Probe 指令：
  21. wait 5000
  22. note send_after_completion <完成後 send 狀態>
  23. texts
- 24. set_text latest_response <文字區塊編號>
- 25. note latest_response_text atlas-ok
- 26. note smoke_result success
+ 24. highlight_text <文字區塊編號>
+ 25. 確認 Chrome 畫面框線圈住 atlas-ok 那段最新 assistant 回覆
+ 26. set_text latest_response <文字區塊編號>
+ 27. note latest_response_text atlas-ok
+ 28. note smoke_result success
 """
     )
 
@@ -661,6 +826,32 @@ def interactive_probe(
             print_text_blocks(text_blocks)
             continue
 
+        if command == "highlight_text":
+            if len(parts) < 2 or not parts[1].isdigit():
+                print("用法：highlight_text <text-index>")
+                continue
+            index = int(parts[1])
+            if index < 0 or index >= len(text_blocks):
+                print("index 超出目前文字區塊清單範圍。請先輸入 texts 重新掃描。")
+                continue
+            result = highlight_text_block(page, text_blocks[index], f"text[{index:02d}]")
+            if result.get("found"):
+                print(
+                    "已在 Chrome 高亮文字區塊："
+                    f"text[{index:02d}] {text_preview(result.get('text'), 160)}"
+                )
+                print("請看瀏覽器畫面，確認粉紅框線圈住的是最新 assistant 回覆。")
+                action_log.append({"action": "highlight_text", "index": index})
+            else:
+                print(f"高亮失敗：{result.get('reason')}")
+            continue
+
+        if command == "clear_highlights":
+            cleared = clear_text_highlights(page)
+            action_log.append({"action": "clear_highlights", "count": cleared})
+            print(f"已清除 probe 高亮：{cleared} 個標記。")
+            continue
+
         if command == "inspect":
             if len(parts) < 2 or not parts[1].isdigit():
                 print("用法：inspect <index>")
@@ -709,6 +900,11 @@ def interactive_probe(
             if index < 0 or index >= len(text_blocks):
                 print("index 超出目前文字區塊清單範圍。請先輸入 texts 重新掃描。")
                 continue
+            result = highlight_text_block(page, text_blocks[index], f"{target} text[{index:02d}]")
+            if result.get("found"):
+                print("已先在 Chrome 高亮這個文字區塊，請確認粉紅框線圈住的是正確回覆。")
+            else:
+                print(f"警告：記錄前高亮失敗：{result.get('reason')}")
             record_text_choice(choices, target, index, text_blocks[index])
             action_log.append({"action": "set_text", "target": target, "index": index})
             continue
@@ -834,7 +1030,7 @@ def interactive_probe(
                     "send_index": send_index,
                 }
             )
-            print("已送出 smoke prompt。請等生成完成後輸入 texts、set_text latest_response <編號>、note smoke_result success。")
+            print("已送出 smoke prompt。請等生成完成後輸入 texts、highlight_text <編號>、set_text latest_response <編號>、note smoke_result success。")
             elements = extract_elements(page)
             text_blocks = extract_text_blocks(page)
             print_elements(elements)
