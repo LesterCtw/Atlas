@@ -7,9 +7,24 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from atlas.fake_loop import FakeTgenieAdapter
+from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError
 from atlas.tui import AtlasApp
 from rich.cells import cell_len
 from textual.widgets import Input, RichLog, Static
+
+
+class RecordingLoginBrowserLauncher:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Path]] = []
+
+    def open_login_browser(self, url: str, profile_dir: Path) -> object:
+        self.calls.append((url, profile_dir))
+        return object()
+
+
+class FailingLoginBrowserLauncher:
+    def open_login_browser(self, url: str, profile_dir: Path) -> object:
+        raise TgenieBrowserLaunchError("Could not open system Chrome. Install Google Chrome.")
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -30,6 +45,150 @@ def rich_color_tuple(segment: object) -> tuple[int, int, int]:
 
 
 class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
+    async def test_first_run_tgenie_url_is_saved_from_prompt(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                app = AtlasApp(workspace=Path(workspace_directory).resolve(), tgenie_config_store=store)
+
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: tGenie URL is not configured.", messages)
+
+                    prompt = pilot.app.query_one("#prompt", Input)
+                    prompt.value = " https://tgenie.example.test "
+                    await prompt.action_submit()
+                    await pilot.pause()
+
+                self.assertEqual(store.load().tgenie_url, "https://tgenie.example.test")
+
+    async def test_first_run_tgenie_url_opens_chrome_after_it_is_saved(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                launcher = RecordingLoginBrowserLauncher()
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=launcher,
+                )
+
+                async with app.run_test() as pilot:
+                    prompt = pilot.app.query_one("#prompt", Input)
+                    prompt.value = "https://tgenie.example.test"
+                    await prompt.action_submit()
+                    await pilot.pause()
+
+                self.assertEqual(launcher.calls, [("https://tgenie.example.test", store.chrome_profile_dir)])
+
+    async def test_slash_command_during_first_run_url_prompt_is_not_saved_as_url(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                app = AtlasApp(workspace=Path(workspace_directory).resolve(), tgenie_config_store=store)
+
+                async with app.run_test() as pilot:
+                    prompt = pilot.app.query_one("#prompt", Input)
+                    prompt.value = "/help"
+                    await prompt.action_submit()
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: Available commands", messages)
+
+                self.assertIsNone(store.load().tgenie_url)
+
+    async def test_saved_tgenie_url_is_reused_without_prompting_again(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                app = AtlasApp(workspace=Path(workspace_directory).resolve(), tgenie_config_store=store)
+
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: Using saved tGenie URL.", messages)
+                    self.assertNotIn("tGenie URL is not configured", messages)
+
+    async def test_saved_tgenie_url_opens_chrome_and_waits_for_manual_login(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                launcher = RecordingLoginBrowserLauncher()
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=launcher,
+                )
+
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: Complete login in Chrome, then type /login-done.", messages)
+
+                self.assertEqual(launcher.calls, [("https://tgenie.example.test", store.chrome_profile_dir)])
+
+    async def test_tgenie_browser_launch_error_is_shown_in_tui(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=FailingLoginBrowserLauncher(),
+                )
+
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Error: Could not open system Chrome.", messages)
+
+    async def test_login_done_confirms_manual_tgenie_login(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=RecordingLoginBrowserLauncher(),
+                )
+
+                async with app.run_test() as pilot:
+                    prompt = pilot.app.query_one("#prompt", Input)
+                    prompt.value = "/login-done"
+                    await prompt.action_submit()
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: tGenie login confirmed. You can continue in Atlas.", messages)
+
+    async def test_login_done_is_suggested_while_waiting_for_manual_login(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=RecordingLoginBrowserLauncher(),
+                )
+
+                async with app.run_test() as pilot:
+                    await pilot.press("/")
+                    await pilot.pause()
+
+                    suggestions = pilot.app.query_one("#slash-suggestions", Static)
+                    self.assertIn("/login-done", str(suggestions.render()))
+
     async def test_app_shows_header_messages_and_prompt_input(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory).resolve()

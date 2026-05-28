@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from atlas.cli import resolve_workspace
+from atlas.cli import build_app, resolve_workspace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +44,17 @@ class AtlasCliTests(unittest.TestCase):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
         self.assertEqual(project["project"]["scripts"]["atlas"], "atlas.cli:main")
+
+    def test_cli_builds_app_with_tgenie_first_run_setup_enabled(self) -> None:
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                workspace = Path(workspace_directory).resolve()
+                app = build_app(workspace=workspace, config_dir=Path(config_directory))
+
+                self.assertIsNotNone(app.tgenie_config_store)
+                self.assertIsNotNone(app.tgenie_browser_launcher)
+                assert app.tgenie_config_store is not None
+                self.assertNotIn(workspace, app.tgenie_config_store.chrome_profile_dir.parents)
 
 
 if __name__ == "__main__":

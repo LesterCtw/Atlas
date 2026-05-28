@@ -4,10 +4,11 @@ import argparse
 import json
 import os
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from atlas.tgenie_setup import default_atlas_config_dir
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
@@ -45,18 +46,6 @@ select,
 [data-test],
 [data-cy]
 """
-
-
-def atlas_config_dir() -> Path:
-    if os.name == "nt":
-        base = os.environ.get("APPDATA")
-        if base:
-            return Path(base) / "Atlas"
-        return Path.home() / "AppData" / "Roaming" / "Atlas"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Atlas"
-    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "Atlas"
-
 
 def text_preview(value: str | None, limit: int = 120) -> str:
     if not value:
@@ -391,7 +380,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile-dir",
         type=Path,
-        default=atlas_config_dir() / "chrome-profile",
+        default=default_atlas_config_dir() / "chrome-profile",
         help="Chrome user data directory. Default: user Atlas config directory.",
     )
     parser.add_argument(

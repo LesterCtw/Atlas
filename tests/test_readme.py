@@ -72,6 +72,17 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("shell.run", readme)
         self.assertIn("confirmation-required", readme)
 
+    def test_readme_explains_first_run_tgenie_setup(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("首次 tGenie 設定", readme)
+        self.assertIn("tGenie URL", readme)
+        self.assertIn("後續啟動會重用已儲存的 URL", readme)
+        self.assertIn("Chrome profile", readme)
+        self.assertIn("不放在 workspace", readme)
+        self.assertIn("/login-done", readme)
+        self.assertIn("Atlas 不會要求、儲存或處理密碼", readme)
+
     def test_readme_explains_skill_loader_usage(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

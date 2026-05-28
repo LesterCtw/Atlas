@@ -10,6 +10,7 @@ from textual.widgets import Input, RichLog, Static
 from atlas.commands import handle_slash_command
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
 from atlas.skills import SkillLoader
+from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
 
 
 STATUS_MESSAGES = {
@@ -91,10 +92,17 @@ class AtlasApp(App[None]):
         self,
         workspace: Path,
         fake_adapter: FakeTgenieAdapter | None = None,
+        tgenie_config_store: AtlasConfigStore | None = None,
+        tgenie_browser_launcher: TgenieBrowserLauncher | None = None,
     ) -> None:
         super().__init__()
         self.workspace = workspace
         self.fake_adapter = fake_adapter
+        self.tgenie_config_store = tgenie_config_store
+        self.tgenie_browser_launcher = tgenie_browser_launcher
+        self._tgenie_login_session: object | None = None
+        self._awaiting_tgenie_url = False
+        self._awaiting_tgenie_login = False
         self.slash_options: list[str] = []
         self.selected_slash_index = 0
         self._transcript_group: str | None = None
@@ -142,11 +150,40 @@ class AtlasApp(App[None]):
 
     def on_mount(self) -> None:
         self._write_agent_output("Atlas: Ready.")
+        self._start_tgenie_setup_if_needed()
         self.query_one("#prompt", Input).focus()
+
+    def _start_tgenie_setup_if_needed(self) -> None:
+        if self.tgenie_config_store is None:
+            return
+        config = self.tgenie_config_store.load()
+        if config.tgenie_url is None:
+            self._awaiting_tgenie_url = True
+            self._write_agent_output("Atlas: tGenie URL is not configured. Paste the tGenie URL to continue.")
+            return
+        self._write_agent_output("Atlas: Using saved tGenie URL.")
+        self._open_tgenie_login(config.tgenie_url)
+
+    def _open_tgenie_login(self, url: str) -> None:
+        if self.tgenie_config_store is None or self.tgenie_browser_launcher is None:
+            return
+        self._write_agent_output("Atlas: Opening tGenie in system Chrome.")
+        try:
+            self._tgenie_login_session = self.tgenie_browser_launcher.open_login_browser(
+                url=url,
+                profile_dir=self.tgenie_config_store.chrome_profile_dir,
+            )
+        except TgenieBrowserLaunchError as error:
+            self._write_agent_output(f"Error: {error}")
+            return
+        self._awaiting_tgenie_login = True
+        self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done.")
 
     def _available_slash_options(self, value: str = "/") -> list[str]:
         skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
         options = [*BASE_SLASH_OPTIONS, *skill_options]
+        if self._awaiting_tgenie_login:
+            options.append("/login-done")
         if value == "/":
             return options
         filtered_options = [option for option in options if option.startswith(value)]
@@ -275,6 +312,11 @@ class AtlasApp(App[None]):
 
         self._remember_prompt(prompt)
 
+        if self._awaiting_tgenie_login and prompt == "/login-done":
+            self._awaiting_tgenie_login = False
+            self._write_agent_output("Atlas: tGenie login confirmed. You can continue in Atlas.")
+            return
+
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
             self._write_agent_output(f"Atlas: {result.message}")
@@ -283,6 +325,17 @@ class AtlasApp(App[None]):
                     self.fake_adapter.inject(result.injected_message)
             if result.action == "exit":
                 self.exit()
+            return
+
+        if self._awaiting_tgenie_url:
+            try:
+                self.tgenie_config_store.save_tgenie_url(prompt)
+            except ValueError as error:
+                self._write_agent_output(f"Error: {error}")
+                return
+            self._awaiting_tgenie_url = False
+            self._write_agent_output("Atlas: tGenie URL saved.")
+            self._open_tgenie_login(prompt)
             return
 
         self._write_transcript(self._format_user_prompt(prompt), group="user")
