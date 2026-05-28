@@ -88,6 +88,8 @@ class ReadmeTests(unittest.TestCase):
 
         self.assertIn("notes", readme)
         self.assertIn("texts", readme)
+        self.assertIn("inspect <元素編號>", readme)
+        self.assertIn("Stable selector candidates", readme)
         self.assertIn("set_text latest_response", readme)
         self.assertIn("smoke <prompt_input 編號> <send_button 編號>", readme)
         self.assertIn("Gemini-3.0-flash Preview (All around help)", readme)

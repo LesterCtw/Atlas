@@ -172,14 +172,14 @@
     <main>
       <h1>Atlas #5 公司補件清單</h1>
       <p class="lead">
-        目的：明天到公司只補 #5 還缺的最小資料。已經有的 selector、模型、send/stop
-        行為、smoke test 結果，不要重跑完整 probe。
+        目的：明天到公司只補 #5 還缺的最小資料。已經有的模型、prompt input、new conversation、
+        send/stop 行為、smoke test 結果，不要重跑完整 probe。
       </p>
 
       <div class="box bad">
-        <strong>明天只需要補 1 件核心資料：</strong>
-        找出 tGenie 最新 assistant 回覆，也就是包含 <code>atlas-ok</code> 的那個文字區塊，讓 Atlas adapter
-        之後能讀回 tGenie 回覆。
+        <strong>明天只補 2 類資料：</strong>
+        第一，替 <code>sidebar_toggle</code> 和 <code>send_button</code> 產出穩定 selector candidates；
+        第二，找出 tGenie 最新 assistant 回覆，也就是包含 <code>atlas-ok</code> 的文字區塊。
       </div>
 
       <h2>已知資訊，不要重做</h2>
@@ -203,7 +203,7 @@
           </tr>
           <tr>
             <td>sidebar toggle</td>
-            <td>座標約 <code>28,17,23x24</code>，無 visible label，暫時是 manual review / fallback。</td>
+            <td>座標約 <code>28,17,23x24</code>，無 visible label。明天只要補 <code>inspect</code> 產出的 parent button / ARIA / title / test id candidates。</td>
           </tr>
           <tr>
             <td>new conversation</td>
@@ -218,7 +218,7 @@
           </tr>
           <tr>
             <td>send button</td>
-            <td>座標約 <code>1099,288,40x40</code>，無 visible label，暫時是 manual review / fallback。</td>
+            <td>座標約 <code>1099,288,40x40</code>，無 visible label。明天只要補 <code>inspect</code> 產出的 parent button / ARIA / title / test id candidates。</td>
           </tr>
           <tr>
             <td>attach button</td>
@@ -252,6 +252,10 @@
 
       <h2>明天要補的資料</h2>
       <ul class="checklist">
+        <li>對 sidebar toggle 執行 <code>inspect &lt;sidebar 編號&gt;</code>，確認有沒有 parent button / ARIA / title / test id selector candidates。</li>
+        <li>對 sidebar toggle 再執行 <code>set sidebar_toggle &lt;sidebar 編號&gt;</code>，新版 probe 會把 stable candidates 寫進報告。</li>
+        <li>對 send button 執行 <code>inspect &lt;send 編號&gt;</code>，確認有沒有 parent button / ARIA / title / test id selector candidates。</li>
+        <li>對 send button 再執行 <code>set send_button &lt;send 編號&gt;</code>，新版 probe 會把 stable candidates 寫進報告。</li>
         <li>用新版 probe 的 <code>texts</code> 列出可見文字區塊。</li>
         <li>找到包含 <code>atlas-ok</code> 的最新 assistant 回覆文字區塊。</li>
         <li>用 <code>set_text latest_response &lt;編號&gt;</code> 記錄它。</li>
@@ -267,17 +271,29 @@
 .\.venv\Scripts\python scripts\probe_tgenie.py --url "https://your-company-tgenie-url"</code></pre>
 
       <h3>2. 進入 tGenie 對話畫面</h3>
-      <p>登入後停在 tGenie 主畫面。你不需要重新記錄既有 selector，只要能建立新對話並送出 smoke prompt。</p>
+      <p>登入後停在 tGenie 主畫面。你不需要重新記錄已經穩定的 selector；只補 sidebar / send button 的穩定 candidates，然後建立新對話並送出 smoke prompt。</p>
       <p>如果畫面狀態和昨天一樣，可以照既有資訊操作：</p>
-      <ul>
-        <li>點 sidebar toggle。</li>
-        <li>點 <code>New Conversation</code>。</li>
-        <li>如果新對話預設顯示 <code>Gemini-3.0-flash Preview (All around help)</code>，這是已知狀態。</li>
-        <li>把模型切到 <code>Gemini-3.1-Pro Preview</code>。</li>
-        <li>送出 smoke prompt。</li>
-      </ul>
+      <pre><code>list
+inspect 0
+set sidebar_toggle 0
+click 0
+list</code></pre>
+      <p>上面的 <code>0</code> 來自既有 <code>info.md</code>。如果明天 <code>list</code> 編號不同，用實際 sidebar toggle 編號。</p>
+      <p>看到 <code>New Conversation</code> 後，照實際編號點它：</p>
+      <pre><code>set new_conversation &lt;New Conversation 編號&gt;
+click &lt;New Conversation 編號&gt;
+list</code></pre>
+      <p>接著記錄 prompt input、send button、model selector。已知 send button 昨天是 Item26，但明天要以 <code>list</code> 實際編號為準。</p>
+      <pre><code>set prompt_input &lt;prompt input 編號&gt;
+inspect &lt;send button 編號&gt;
+set send_button &lt;send button 編號&gt;
+set model_selector &lt;model selector 編號&gt;
+note default_model Gemini-3.0-flash Preview (All around help)
+note target_model Gemini-3.1-Pro Preview
+note selected_model Gemini-3.1-Pro Preview</code></pre>
+      <p>如果新對話預設顯示 <code>Gemini-3.0-flash Preview (All around help)</code>，這是已知狀態；把模型切到 <code>Gemini-3.1-Pro Preview</code> 後再送 smoke prompt。</p>
 
-      <h3>3. 在 probe 裡只補 latest response</h3>
+      <h3>3. 在 probe 裡補 latest response</h3>
       <p>送出 smoke prompt 並看到 tGenie 回覆 <code>atlas-ok</code> 後，在 probe terminal 輸入：</p>
       <pre><code>texts</code></pre>
       <p>在輸出中找到包含 <code>atlas-ok</code> 的文字區塊編號，例如 <code>[37]</code>。接著輸入：</p>
@@ -295,6 +311,12 @@ done</code></pre>
       <h2>回家後只要帶回這些文字</h2>
       <p>不用帶圖。只要從 <code>probe-output/tgenie_probe_*.md</code> 抄下面這些非敏感段落：</p>
       <pre><code>## 校準結果
+- **sidebar_toggle** ...
+  - Stable selector candidates:
+    - ...
+- **send_button** ...
+  - Stable selector candidates:
+    - ...
 - **latest_response** ...
 
 ## #5 必填觀察
@@ -313,6 +335,7 @@ done</code></pre>
       <h2>#5 實作判斷</h2>
       <p>拿到 <code>latest_response</code> 後，#5 就可以往 <code>ready-for-agent</code> 推進。原因：</p>
       <ul>
+        <li>sidebar / send button 的 manual fallback 會有新版 probe 產出的 stable selector candidates。</li>
         <li>建立新對話的 sidebar / new conversation 流程已知。</li>
         <li>prompt input 已知。</li>
         <li>新對話預設模型已知：<code>Gemini-3.0-flash Preview (All around help)</code>。</li>

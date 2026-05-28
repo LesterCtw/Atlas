@@ -285,6 +285,163 @@ def selector_hint(element: dict[str, Any]) -> dict[str, str]:
     return {"method": "manual_review", "value": element_label(element)}
 
 
+def inspect_element_point(page: "Page", element: dict[str, Any]) -> dict[str, Any]:
+    return page.evaluate(
+        """
+        (bbox) => {
+          const x = bbox.x + bbox.width / 2;
+          const y = bbox.y + bbox.height / 2;
+          const start = document.elementFromPoint(x, y);
+
+          function cleanText(value) {
+            return (value || '').replace(/\\s+/g, ' ').trim();
+          }
+
+          function attr(el, name) {
+            return el.getAttribute(name) || '';
+          }
+
+          function visibleName(el) {
+            return cleanText(
+              attr(el, 'aria-label')
+              || attr(el, 'title')
+              || attr(el, 'placeholder')
+              || el.innerText
+              || el.textContent
+              || attr(el, 'data-testid')
+              || attr(el, 'data-test')
+              || attr(el, 'data-cy')
+            );
+          }
+
+          function cssString(value) {
+            return String(value).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'");
+          }
+
+          function nodeSummary(el, depth) {
+            const rect = el.getBoundingClientRect();
+            return {
+              depth,
+              tag: el.tagName.toLowerCase(),
+              role: attr(el, 'role'),
+              type: attr(el, 'type'),
+              text: cleanText(el.innerText || el.textContent),
+              ariaLabel: attr(el, 'aria-label'),
+              placeholder: attr(el, 'placeholder'),
+              title: attr(el, 'title'),
+              id: el.id || '',
+              name: attr(el, 'name'),
+              testId: attr(el, 'data-testid') || attr(el, 'data-test') || attr(el, 'data-cy'),
+              className: typeof el.className === 'string' ? el.className : '',
+              bbox: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              },
+            };
+          }
+
+          function addCandidate(candidates, method, payload, reason) {
+            const key = `${method}:${JSON.stringify(payload)}`;
+            if (candidates.some((candidate) => candidate.key === key)) return;
+            candidates.push({key, method, ...payload, reason});
+          }
+
+          const chain = [];
+          const candidates = [];
+          let nearestInteractive = null;
+          let el = start;
+          let depth = 0;
+
+          while (el && el.nodeType === Node.ELEMENT_NODE && depth < 8) {
+            const summary = nodeSummary(el, depth);
+            chain.push(summary);
+
+            const tag = summary.tag;
+            const role = summary.role;
+            const testId = summary.testId;
+            const ariaLabel = summary.ariaLabel;
+            const placeholder = summary.placeholder;
+            const title = summary.title;
+            const id = summary.id;
+            const name = visibleName(el);
+            const isInteractive =
+              ['button', 'a', 'input', 'textarea', 'select'].includes(tag)
+              || Boolean(role)
+              || Boolean(ariaLabel)
+              || Boolean(title)
+              || Boolean(testId)
+              || el.hasAttribute('contenteditable');
+
+            if (isInteractive && nearestInteractive === null) {
+              nearestInteractive = summary;
+            }
+
+            if (testId) {
+              addCandidate(
+                candidates,
+                'css',
+                {value: `[data-testid='${cssString(testId)}'], [data-test='${cssString(testId)}'], [data-cy='${cssString(testId)}']`},
+                `ancestor depth ${depth} test id`
+              );
+            }
+            if (ariaLabel) {
+              addCandidate(candidates, 'get_by_label', {value: ariaLabel}, `ancestor depth ${depth} aria-label`);
+            }
+            if (placeholder) {
+              addCandidate(candidates, 'get_by_placeholder', {value: placeholder}, `ancestor depth ${depth} placeholder`);
+            }
+            if (role && name) {
+              addCandidate(
+                candidates,
+                'get_by_role',
+                {role, name: name.slice(0, 120)},
+                `ancestor depth ${depth} role and accessible name`
+              );
+            }
+            if (tag === 'button' && name) {
+              addCandidate(
+                candidates,
+                'get_by_role',
+                {role: 'button', name: name.slice(0, 120)},
+                `ancestor depth ${depth} button name`
+              );
+            }
+            if (title) {
+              addCandidate(candidates, 'get_by_title', {value: title}, `ancestor depth ${depth} title`);
+            }
+            if (id) {
+              addCandidate(candidates, 'css', {value: `#${CSS.escape(id)}`}, `ancestor depth ${depth} id`);
+            }
+
+            el = el.parentElement;
+            depth += 1;
+          }
+
+          return {
+            point: {x: Math.round(x), y: Math.round(y)},
+            hit: chain[0] || null,
+            nearest_interactive: nearestInteractive,
+            ancestor_chain: chain,
+            selector_candidates: candidates.map(({key, ...candidate}) => candidate),
+          };
+        }
+        """,
+        element["bbox"],
+    )
+
+
+def choose_selector_hint(element: dict[str, Any], stable_probe: dict[str, Any] | None = None) -> dict[str, str]:
+    hint = selector_hint(element)
+    if hint.get("method") != "manual_review" or stable_probe is None:
+        return hint
+    candidates = stable_probe.get("selector_candidates")
+    if isinstance(candidates, list) and candidates:
+        return candidates[0]
+    return hint
+
+
 def text_selector_hint(block: dict[str, Any]) -> dict[str, str]:
     if block.get("testId"):
         return {"method": "css", "value": f"[data-testid='{block['testId']}']"}
@@ -297,14 +454,68 @@ def text_selector_hint(block: dict[str, Any]) -> dict[str, str]:
     return {"method": "text_contains", "value": text_preview(block.get("text"), 80)}
 
 
-def record_choice(choices: dict[str, Any], target: str, index: int, element: dict[str, Any]) -> None:
+def format_selector_candidate(candidate: dict[str, Any]) -> str:
+    method = candidate.get("method")
+    reason = candidate.get("reason")
+    if method == "get_by_role":
+        rendered = f"get_by_role({candidate.get('role')!r}, name={candidate.get('name')!r})"
+    elif method in {"get_by_label", "get_by_placeholder", "get_by_title"}:
+        rendered = f"{method}({candidate.get('value')!r})"
+    elif method == "css":
+        rendered = f"locator({candidate.get('value')!r})"
+    else:
+        rendered = json.dumps(candidate, ensure_ascii=False)
+    if reason:
+        return f"{rendered} ({reason})"
+    return rendered
+
+
+def print_stable_probe(stable_probe: dict[str, Any]) -> None:
+    print("\nDOM 穩定 selector 探查：")
+    print(f"- point: {stable_probe.get('point')}")
+    nearest = stable_probe.get("nearest_interactive")
+    if nearest:
+        print(
+            "- nearest interactive: "
+            f"{nearest.get('tag')} role={nearest.get('role') or '-'} "
+            f"title={nearest.get('title') or '-'} aria={nearest.get('ariaLabel') or '-'} "
+            f"text={text_preview(nearest.get('text'), 100) or '-'}"
+        )
+    candidates = stable_probe.get("selector_candidates") or []
+    if candidates:
+        print("- selector candidates:")
+        for index, candidate in enumerate(candidates[:8]):
+            print(f"  [{index}] {format_selector_candidate(candidate)}")
+    else:
+        print("- selector candidates: none")
+
+    print("- ancestor chain:")
+    for node in (stable_probe.get("ancestor_chain") or [])[:8]:
+        print(
+            f"  depth={node.get('depth')} {node.get('tag')} "
+            f"role={node.get('role') or '-'} title={node.get('title') or '-'} "
+            f"aria={node.get('ariaLabel') or '-'} text={text_preview(node.get('text'), 80) or '-'}"
+        )
+
+
+def record_choice(
+    choices: dict[str, Any],
+    target: str,
+    index: int,
+    element: dict[str, Any],
+    stable_probe: dict[str, Any] | None = None,
+) -> None:
     choices[target] = {
         "index": index,
         "description": TARGET_DESCRIPTIONS[target],
         "element": element,
-        "selector_hint": selector_hint(element),
+        "raw_selector_hint": selector_hint(element),
+        "selector_hint": choose_selector_hint(element, stable_probe),
+        "stable_probe": stable_probe,
     }
     print(f"已記錄 {target}：{element_label(element)}")
+    if stable_probe is not None:
+        print_stable_probe(stable_probe)
 
 
 def record_text_choice(choices: dict[str, Any], target: str, index: int, block: dict[str, Any]) -> None:
@@ -352,6 +563,7 @@ Probe 指令：
   notes                        顯示 #5 必填觀察欄位
   list                         重新列出目前頁面互動元素
   texts                        列出目前頁面可見文字區塊，用來找 latest response
+  inspect <index>               從元素座標往 DOM 父層找穩定 selector candidates
   set <target> <index>          把某個元素記錄成 target
   set_text <target> <index>     把某個文字區塊記錄成 target，例如 latest_response
   note <key> <text>             記錄 #5 觀察，例如 note target_model Gemini-3.1-Pro Preview
@@ -367,30 +579,32 @@ Probe 指令：
   done                         結束 probe 並輸出報告
 
 建議流程：
-  1. set sidebar_toggle <編號>
-  2. click <sidebar 編號>
-  3. list
-  4. set new_conversation <編號>
-  5. click <new conversation 編號>
-  6. list
-  7. set prompt_input <編號>
-  8. set send_button <編號>
-  9. set model_selector <編號>
- 10. note default_model <目前預設模型>
- 11. click <model selector 編號> 後確認 Gemini-3.1-Pro Preview
- 12. note selected_model <實際選定模型>
- 13. note send_before_typing <輸入前 send 狀態>
- 14. replace <prompt input 編號> 測試訊息
- 15. note send_after_typing <輸入後 send 狀態>
- 16. smoke <prompt input 編號> <send button 編號>
- 17. hover <send button 編號>
- 18. note stop_generating_hover_label <hover 看到的文字>
- 19. wait 5000
- 20. note send_after_completion <完成後 send 狀態>
- 21. texts
- 22. set_text latest_response <文字區塊編號>
- 23. note latest_response_text atlas-ok
- 24. note smoke_result success
+  1. inspect <sidebar 編號>
+  2. set sidebar_toggle <sidebar 編號>
+  3. click <sidebar 編號>
+  4. list
+  5. set new_conversation <編號>
+  6. click <new conversation 編號>
+  7. list
+  8. set prompt_input <編號>
+  9. inspect <send button 編號>
+ 10. set send_button <編號>
+ 11. set model_selector <編號>
+ 12. note default_model <目前預設模型>
+ 13. click <model selector 編號> 後確認 Gemini-3.1-Pro Preview
+ 14. note selected_model <實際選定模型>
+ 15. note send_before_typing <輸入前 send 狀態>
+ 16. replace <prompt input 編號> 測試訊息
+ 17. note send_after_typing <輸入後 send 狀態>
+ 18. smoke <prompt input 編號> <send button 編號>
+ 19. hover <send button 編號>
+ 20. note stop_generating_hover_label <hover 看到的文字>
+ 21. wait 5000
+ 22. note send_after_completion <完成後 send 狀態>
+ 23. texts
+ 24. set_text latest_response <文字區塊編號>
+ 25. note latest_response_text atlas-ok
+ 26. note smoke_result success
 """
     )
 
@@ -447,6 +661,19 @@ def interactive_probe(
             print_text_blocks(text_blocks)
             continue
 
+        if command == "inspect":
+            if len(parts) < 2 or not parts[1].isdigit():
+                print("用法：inspect <index>")
+                continue
+            index = int(parts[1])
+            if index < 0 or index >= len(elements):
+                print("index 超出目前元素清單範圍。")
+                continue
+            stable_probe = inspect_element_point(page, elements[index])
+            print_stable_probe(stable_probe)
+            action_log.append({"action": "inspect", "index": index, "label": element_label(elements[index])})
+            continue
+
         if command == "set":
             if len(parts) < 3:
                 print("用法：set <target> <index>")
@@ -462,7 +689,8 @@ def interactive_probe(
             if index < 0 or index >= len(elements):
                 print("index 超出目前元素清單範圍。")
                 continue
-            record_choice(choices, target, index, elements[index])
+            stable_probe = inspect_element_point(page, elements[index])
+            record_choice(choices, target, index, elements[index], stable_probe)
             action_log.append({"action": "set", "target": target, "index": index})
             continue
 
@@ -669,6 +897,21 @@ def write_report(
         lines.append(
             f"- **{key}** ({description}): `{choice['selector_hint']}` — {element_label(choice['element'])}"
         )
+        stable_probe = choice.get("stable_probe")
+        if stable_probe:
+            candidates = stable_probe.get("selector_candidates") or []
+            if candidates:
+                lines.append("  - Stable selector candidates:")
+                for candidate in candidates[:5]:
+                    lines.append(f"    - `{format_selector_candidate(candidate)}`")
+            nearest = stable_probe.get("nearest_interactive")
+            if nearest:
+                lines.append(
+                    "  - Nearest interactive: "
+                    f"`{nearest.get('tag')}` role=`{nearest.get('role') or '-'}` "
+                    f"title=`{nearest.get('title') or '-'}` aria=`{nearest.get('ariaLabel') or '-'}` "
+                    f"text={text_preview(nearest.get('text'), 120) or '-'}"
+                )
 
     lines.extend(["", "## #5 必填觀察", ""])
     for key, description in OBSERVATIONS:

@@ -478,6 +478,7 @@ targets
 notes
 list
 texts
+inspect <元素編號>
 set sidebar_toggle <元素編號>
 click <元素編號>
 hover <元素編號>
@@ -501,46 +502,47 @@ done
 
 1. 輸入 `targets`，看有哪些項目還沒設定。
 2. 找出 sidebar 展開按鈕的編號。
-3. 輸入 `set sidebar_toggle <編號>`。
-4. 輸入 `click <編號>`，真的點開 sidebar。
-5. 輸入 `list`，重新掃描目前畫面。
-6. 找出 new conversation 按鈕的編號。
-7. 輸入 `set new_conversation <編號>`。
-8. 輸入 `click <編號>`，真的建立新對話。
-9. 輸入 `list`。
-10. 找出 prompt input 對話輸入框的編號。
-11. 輸入 `set prompt_input <編號>`。
-12. 輸入 `type <編號> 測試訊息`，確認文字真的進入輸入框。
+3. 輸入 `inspect <編號>`，讓 probe 往父層找 button、ARIA、title、test id 等 stable selector candidates。
+4. 輸入 `set sidebar_toggle <編號>`，新版 probe 會把 stable selector candidates 寫進報告。
+5. 輸入 `click <編號>`，真的點開 sidebar。
+6. 輸入 `list`，重新掃描目前畫面。
+7. 找出 new conversation 按鈕的編號。
+8. 輸入 `set new_conversation <編號>`。
+9. 輸入 `click <編號>`，真的建立新對話。
+10. 輸入 `list`。
+11. 找出 prompt input 對話輸入框的編號。
+12. 輸入 `set prompt_input <編號>`。
 13. 找出 send button 的編號。
-14. 輸入 `set send_button <編號>`。
-15. 找出 attach 按鈕的編號。
-16. 輸入 `set attach_button <編號>`。
-17. 找出 model selector 的編號。
-18. 輸入 `set model_selector <編號>`。
-19. 找出 web search 開關的編號。
-20. 輸入 `set web_search_toggle <編號>`。
-21. 輸入 `notes`，看 #5 還缺哪些觀察欄位。
-22. 輸入 `note target_model Gemini-3.1-Pro Preview`，記錄 #5 目前要使用的模型。
-23. 輸入 `note default_model Gemini-3.0-flash Preview (All around help)`，記錄新對話預設模型。
-24. 點開 model selector，確認 `Gemini-3.1-Pro Preview` 能被選到。
-25. 輸入 `note selected_model Gemini-3.1-Pro Preview`。
-26. 在還沒輸入前，輸入 `note send_before_typing <你看到的 send 狀態>`。
-27. 輸入 `replace <prompt_input 編號> 測試訊息`，確認文字真的進入輸入框。
-28. 輸入 `note send_after_typing <你看到的 send 狀態>`。
-29. 輸入 `smoke <prompt_input 編號> <send_button 編號>`，送出固定測試 prompt：`Atlas smoke test. Reply with exactly: atlas-ok`。
-30. 生成中把滑鼠移到 send/stop button：`hover <send_button 編號>`。
-31. 如果畫面顯示 `Stop generating`，輸入 `note stop_generating_hover_label Stop generating`。
-32. 輸入 `note send_while_generating <生成中 send/stop 狀態>`。
-33. 等回覆完成後輸入 `note send_after_completion <完成後 send 狀態>`。
-34. 輸入 `texts`，列出可見文字區塊。
-35. 找到最新 assistant 回覆，輸入 `set_text latest_response <文字區塊編號>`。
-36. 輸入 `note latest_response_text atlas-ok`。
-37. 輸入 `note latest_response_rule <你如何判斷這是最新 assistant 回覆>`。
-38. 輸入 `note smoke_result success`。
-39. 輸入 `shot`，留一張人工截圖。
-40. 輸入 `done`，結束並輸出報告。
+14. 輸入 `inspect <編號>`，讓 probe 往父層找 button、ARIA、title、test id 等 stable selector candidates。
+15. 輸入 `set send_button <編號>`，新版 probe 會把 stable selector candidates 寫進報告。
+16. 找出 attach 按鈕的編號。
+17. 輸入 `set attach_button <編號>`。
+18. 找出 model selector 的編號。
+19. 輸入 `set model_selector <編號>`。
+20. 找出 web search 開關的編號。
+21. 輸入 `set web_search_toggle <編號>`。
+22. 輸入 `notes`，看 #5 還缺哪些觀察欄位。
+23. 輸入 `note target_model Gemini-3.1-Pro Preview`，記錄 #5 目前要使用的模型。
+24. 輸入 `note default_model Gemini-3.0-flash Preview (All around help)`，記錄新對話預設模型。
+25. 點開 model selector，確認 `Gemini-3.1-Pro Preview` 能被選到。
+26. 輸入 `note selected_model Gemini-3.1-Pro Preview`。
+27. 在還沒輸入前，輸入 `note send_before_typing <你看到的 send 狀態>`。
+28. 輸入 `replace <prompt_input 編號> 測試訊息`，確認文字真的進入輸入框。
+29. 輸入 `note send_after_typing <你看到的 send 狀態>`。
+30. 輸入 `smoke <prompt_input 編號> <send_button 編號>`，送出固定測試 prompt：`Atlas smoke test. Reply with exactly: atlas-ok`。
+31. 生成中把滑鼠移到 send/stop button：`hover <send_button 編號>`。
+32. 如果畫面顯示 `Stop generating`，輸入 `note stop_generating_hover_label Stop generating`。
+33. 輸入 `note send_while_generating <生成中 send/stop 狀態>`。
+34. 等回覆完成後輸入 `note send_after_completion <完成後 send 狀態>`。
+35. 輸入 `texts`，列出可見文字區塊。
+36. 找到最新 assistant 回覆，輸入 `set_text latest_response <文字區塊編號>`。
+37. 輸入 `note latest_response_text atlas-ok`。
+38. 輸入 `note latest_response_rule <你如何判斷這是最新 assistant 回覆>`。
+39. 輸入 `note smoke_result success`。
+40. 輸入 `shot`，留一張人工截圖。
+41. 輸入 `done`，結束並輸出報告。
 
-**這個做法是什麼**：probe 不只記錄 selector，也會用 `notes` 和 `note` 把 #5 需要的人眼觀察寫進報告。
+**這個做法是什麼**：probe 不只記錄 selector，也會用 `inspect` 從元素座標往 DOM 父層找穩定 selector candidates，並用 `notes` 和 `note` 把 #5 需要的人眼觀察寫進報告。
 
 **為什麼這樣做**：tGenie 有些狀態是 hover tooltip 或生成中短暫狀態，Playwright 不一定能自動讀到；讓 probe 明確要求你記錄，就不會漏掉。
 
@@ -638,6 +640,7 @@ py -3.12 -m venv .venv
 成功標準：
 
 - `tgenie_probe_*.md` 裡面有 `sidebar_toggle`、`new_conversation`、`prompt_input`、`send_button`、`model_selector`、`latest_response`。
+- `sidebar_toggle` 和 `send_button` 底下有 `Stable selector candidates`，或明確記錄沒有可用 parent button / ARIA / title / test id。
 - `tgenie_probe_*.md` 的「#5 必填觀察」裡有 `target_model`、`selected_model`、`stop_generating_hover_label`、`latest_response_text`、`smoke_result`。
 - screenshot 看得出來停在 tGenie 對話頁。
 

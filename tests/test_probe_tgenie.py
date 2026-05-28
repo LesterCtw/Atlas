@@ -35,6 +35,37 @@ class ProbeTgenieTests(unittest.TestCase):
         self.assertIn("smoke_result", observation_keys)
         self.assertEqual(probe.SMOKE_PROMPT, "Atlas smoke test. Reply with exactly: atlas-ok")
 
+    def test_probe_prefers_stable_candidate_when_raw_selector_is_manual_review(self) -> None:
+        probe = load_probe_module()
+        element = {
+            "tag": "svg",
+            "role": "",
+            "type": "",
+            "text": "",
+            "ariaLabel": "",
+            "placeholder": "",
+            "label": "",
+            "title": "",
+            "testId": "",
+            "bbox": {"x": 1, "y": 2, "width": 3, "height": 4},
+        }
+        stable_probe = {
+            "selector_candidates": [
+                {
+                    "method": "get_by_role",
+                    "role": "button",
+                    "name": "Open sidebar",
+                    "reason": "ancestor depth 1 button name",
+                }
+            ]
+        }
+
+        hint = probe.choose_selector_hint(element, stable_probe)
+
+        self.assertEqual(hint["method"], "get_by_role")
+        self.assertEqual(hint["role"], "button")
+        self.assertEqual(hint["name"], "Open sidebar")
+
     def test_probe_report_includes_issue_5_observations_and_text_blocks(self) -> None:
         probe = load_probe_module()
 
@@ -102,6 +133,69 @@ class ProbeTgenieTests(unittest.TestCase):
             self.assertIn("Gemini-3.1-Pro Preview", report)
             self.assertIn("latest_response", report)
             self.assertIn("atlas-ok", report)
+
+    def test_probe_report_includes_stable_selector_candidates(self) -> None:
+        probe = load_probe_module()
+
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            elements = [
+                {
+                    "tag": "svg",
+                    "role": "",
+                    "type": "",
+                    "text": "",
+                    "ariaLabel": "",
+                    "placeholder": "",
+                    "label": "",
+                    "title": "",
+                    "testId": "",
+                    "bbox": {"x": 1, "y": 2, "width": 3, "height": 4},
+                }
+            ]
+            stable_probe = {
+                "nearest_interactive": {
+                    "tag": "button",
+                    "role": "",
+                    "title": "Open sidebar",
+                    "ariaLabel": "",
+                    "text": "",
+                },
+                "selector_candidates": [
+                    {
+                        "method": "get_by_title",
+                        "value": "Open sidebar",
+                        "reason": "ancestor depth 1 title",
+                    }
+                ],
+            }
+            choices = {
+                "sidebar_toggle": {
+                    "index": 0,
+                    "description": "側邊欄展開/收合按鈕",
+                    "element": elements[0],
+                    "raw_selector_hint": {"method": "manual_review", "value": "(no visible label)"},
+                    "selector_hint": {"method": "get_by_title", "value": "Open sidebar"},
+                    "stable_probe": stable_probe,
+                }
+            }
+
+            _json_path, md_path = probe.write_report(
+                output_dir=output_dir,
+                url="https://tgenie.example.test",
+                elements=elements,
+                choices=choices,
+                observations={},
+                text_blocks=[],
+                action_log=[],
+                screenshot_path=None,
+            )
+
+            report = md_path.read_text(encoding="utf-8")
+
+            self.assertIn("Stable selector candidates", report)
+            self.assertIn("get_by_title('Open sidebar')", report)
+            self.assertIn("Nearest interactive", report)
 
 
 if __name__ == "__main__":
