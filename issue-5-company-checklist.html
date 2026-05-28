@@ -189,6 +189,10 @@
             <td><code>Gemini-3.1-Pro Preview</code></td>
           </tr>
           <tr>
+            <td>新對話預設模型</td>
+            <td><code>Gemini-3.0-flash Preview (All around help)</code>。這是預設值，不是 #5 目標模型。</td>
+          </tr>
+          <tr>
             <td>sidebar toggle</td>
             <td>座標約 <code>28,17,23x24</code>，無 visible label，暫時是 manual review / fallback。</td>
           </tr>
@@ -218,6 +222,7 @@
           <tr>
             <td>model menu</td>
             <td>
+              已看到預設項 <code>Gemini-3.0-flash Preview (All around help)</code>；
               已看到 <code>Gemini-3.1-Pro Preview (Advanced reasoning model)</code>。
             </td>
           </tr>
@@ -258,7 +263,8 @@
       <ul>
         <li>點 sidebar toggle。</li>
         <li>點 <code>New Conversation</code>。</li>
-        <li>確認模型是 <code>Gemini-3.1-Pro Preview</code>。</li>
+        <li>如果新對話預設顯示 <code>Gemini-3.0-flash Preview (All around help)</code>，這是已知狀態。</li>
+        <li>把模型切到 <code>Gemini-3.1-Pro Preview</code>。</li>
         <li>送出 smoke prompt。</li>
       </ul>
 
@@ -300,6 +306,7 @@ done</code></pre>
       <ul>
         <li>建立新對話的 sidebar / new conversation 流程已知。</li>
         <li>prompt input 已知。</li>
+        <li>新對話預設模型已知：<code>Gemini-3.0-flash Preview (All around help)</code>。</li>
         <li>目標模型已改成 <code>Gemini-3.1-Pro Preview</code>。</li>
         <li>send/stop 生成狀態已知。</li>
         <li>smoke test 已成功。</li>

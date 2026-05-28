@@ -90,6 +90,7 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("texts", readme)
         self.assertIn("set_text latest_response", readme)
         self.assertIn("smoke <prompt_input 編號> <send_button 編號>", readme)
+        self.assertIn("Gemini-3.0-flash Preview (All around help)", readme)
         self.assertIn("Gemini-3.1-Pro Preview", readme)
         self.assertIn("stop_generating_hover_label", readme)
         self.assertIn("latest_response_text", readme)

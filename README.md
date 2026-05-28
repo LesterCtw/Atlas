@@ -521,7 +521,7 @@ done
 20. 輸入 `set web_search_toggle <編號>`。
 21. 輸入 `notes`，看 #5 還缺哪些觀察欄位。
 22. 輸入 `note target_model Gemini-3.1-Pro Preview`，記錄 #5 目前要使用的模型。
-23. 輸入 `note default_model <畫面預設模型>`，記錄新對話預設模型。
+23. 輸入 `note default_model Gemini-3.0-flash Preview (All around help)`，記錄新對話預設模型。
 24. 點開 model selector，確認 `Gemini-3.1-Pro Preview` 能被選到。
 25. 輸入 `note selected_model Gemini-3.1-Pro Preview`。
 26. 在還沒輸入前，輸入 `note send_before_typing <你看到的 send 狀態>`。
