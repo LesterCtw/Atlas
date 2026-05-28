@@ -17,13 +17,13 @@ class RecordingLoginBrowserLauncher:
     def __init__(self) -> None:
         self.calls: list[tuple[str, Path]] = []
 
-    def open_login_browser(self, url: str, profile_dir: Path) -> object:
+    async def open_login_browser(self, url: str, profile_dir: Path) -> object:
         self.calls.append((url, profile_dir))
         return object()
 
 
 class FailingLoginBrowserLauncher:
-    def open_login_browser(self, url: str, profile_dir: Path) -> object:
+    async def open_login_browser(self, url: str, profile_dir: Path) -> object:
         raise TgenieBrowserLaunchError("Could not open system Chrome. Install Google Chrome.")
 
 

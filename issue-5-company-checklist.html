@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Atlas #5 公司補件清單</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #4b5563;
+        --line: #d1d5db;
+        --soft: #f3f4f6;
+        --ok: #0f766e;
+        --warn: #b45309;
+        --bad: #b91c1c;
+        --blue: #1d4ed8;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC",
+          "Microsoft JhengHei", sans-serif;
+        line-height: 1.55;
+        color: var(--ink);
+        background: #ffffff;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+
+      h2 {
+        font-size: 22px;
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 2px solid var(--line);
+      }
+
+      h3 {
+        font-size: 18px;
+        margin-top: 20px;
+      }
+
+      p {
+        margin: 10px 0;
+      }
+
+      ul,
+      ol {
+        padding-left: 24px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+          monospace;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: var(--soft);
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0b1020;
+        color: #f9fafb;
+        white-space: pre-wrap;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 20px;
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--soft);
+      }
+
+      .lead {
+        font-size: 17px;
+        color: var(--muted);
+      }
+
+      .box {
+        border: 1px solid var(--line);
+        border-left: 5px solid var(--blue);
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 16px 0;
+        background: #f8fafc;
+      }
+
+      .ok {
+        border-left-color: var(--ok);
+      }
+
+      .warn {
+        border-left-color: var(--warn);
+      }
+
+      .bad {
+        border-left-color: var(--bad);
+      }
+
+      .checklist li {
+        list-style: none;
+        margin-left: -20px;
+      }
+
+      .checklist li::before {
+        content: "☐ ";
+        font-weight: 700;
+      }
+
+      @media print {
+        main {
+          padding: 16px;
+        }
+
+        pre {
+          white-space: pre-wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Atlas #5 公司補件清單</h1>
+      <p class="lead">
+        目的：明天到公司只補 #5 還缺的最小資料。已經有的 selector、模型、send/stop
+        行為、smoke test 結果，不要重跑完整 probe。
+      </p>
+
+      <div class="box bad">
+        <strong>明天只需要補 1 件核心資料：</strong>
+        找出 tGenie 最新 assistant 回覆，也就是包含 <code>atlas-ok</code> 的那個文字區塊，讓 Atlas adapter
+        之後能讀回 tGenie 回覆。
+      </div>
+
+      <h2>已知資訊，不要重做</h2>
+      <p>以下資訊已由 <code>info.md</code> 和口頭補充確認，明天不要再花時間重收。</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>已知內容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>目標模型</td>
+            <td><code>Gemini-3.1-Pro Preview</code></td>
+          </tr>
+          <tr>
+            <td>sidebar toggle</td>
+            <td>座標約 <code>28,17,23x24</code>，無 visible label，暫時是 manual review / fallback。</td>
+          </tr>
+          <tr>
+            <td>new conversation</td>
+            <td><code>New Conversation</code>，button，座標約 <code>12,54,295x48</code>。</td>
+          </tr>
+          <tr>
+            <td>prompt input</td>
+            <td>
+              textarea，placeholder：
+              <code>Type a message or type "/" to select a prompt</code>
+            </td>
+          </tr>
+          <tr>
+            <td>send button</td>
+            <td>座標約 <code>1099,288,40x40</code>，無 visible label，暫時是 manual review / fallback。</td>
+          </tr>
+          <tr>
+            <td>attach button</td>
+            <td><code>Attach</code></td>
+          </tr>
+          <tr>
+            <td>web search</td>
+            <td><code>Web Search</code></td>
+          </tr>
+          <tr>
+            <td>model menu</td>
+            <td>
+              已看到 <code>Gemini-3.1-Pro Preview (Advanced reasoning model)</code>。
+            </td>
+          </tr>
+          <tr>
+            <td>生成中狀態</td>
+            <td>send button 外觀前後相同；生成中滑鼠 hover 顯示 <code>Stop generating</code>。</td>
+          </tr>
+          <tr>
+            <td>完成狀態</td>
+            <td>完成後 send/stop button 回到原本樣子。</td>
+          </tr>
+          <tr>
+            <td>smoke test 結果</td>
+            <td>送出 <code>Atlas smoke test. Reply with exactly: atlas-ok</code> 後，tGenie 回覆 <code>atlas-ok</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>明天要補的資料</h2>
+      <ul class="checklist">
+        <li>用新版 probe 的 <code>texts</code> 列出可見文字區塊。</li>
+        <li>找到包含 <code>atlas-ok</code> 的最新 assistant 回覆文字區塊。</li>
+        <li>用 <code>set_text latest_response &lt;編號&gt;</code> 記錄它。</li>
+        <li>記錄判斷規則：為什麼這一塊是最新 assistant 回覆。</li>
+        <li>不要帶出截圖、公司 URL、內部敏感內容。</li>
+      </ul>
+
+      <h2>公司電腦操作步驟</h2>
+      <h3>1. 取得新版程式</h3>
+      <p>如果公司電腦沒有 git，就從 GitHub 下載最新 ZIP，解壓後進入 Atlas 資料夾。</p>
+      <pre><code>py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install -e .
+.\.venv\Scripts\python scripts\probe_tgenie.py --url "https://your-company-tgenie-url"</code></pre>
+
+      <h3>2. 進入 tGenie 對話畫面</h3>
+      <p>登入後停在 tGenie 主畫面。你不需要重新記錄既有 selector，只要能建立新對話並送出 smoke prompt。</p>
+      <p>如果畫面狀態和昨天一樣，可以照既有資訊操作：</p>
+      <ul>
+        <li>點 sidebar toggle。</li>
+        <li>點 <code>New Conversation</code>。</li>
+        <li>確認模型是 <code>Gemini-3.1-Pro Preview</code>。</li>
+        <li>送出 smoke prompt。</li>
+      </ul>
+
+      <h3>3. 在 probe 裡只補 latest response</h3>
+      <p>送出 smoke prompt 並看到 tGenie 回覆 <code>atlas-ok</code> 後，在 probe terminal 輸入：</p>
+      <pre><code>texts</code></pre>
+      <p>在輸出中找到包含 <code>atlas-ok</code> 的文字區塊編號，例如 <code>[37]</code>。接著輸入：</p>
+      <pre><code>set_text latest_response 37
+note latest_response_text atlas-ok
+note latest_response_rule bottom-most assistant response text block after the smoke prompt
+note smoke_result success
+done</code></pre>
+
+      <div class="box warn">
+        <strong>注意：</strong>
+        上面的 <code>37</code> 是例子。明天要用 <code>texts</code> 實際列出的編號。
+      </div>
+
+      <h2>回家後只要帶回這些文字</h2>
+      <p>不用帶圖。只要從 <code>probe-output/tgenie_probe_*.md</code> 抄下面這些非敏感段落：</p>
+      <pre><code>## 校準結果
+- **latest_response** ...
+
+## #5 必填觀察
+- **latest_response_rule** ...
+- **latest_response_text** ...
+- **smoke_result** ...</code></pre>
+
+      <h2>如果 texts 找不到 atlas-ok</h2>
+      <ol>
+        <li>先輸入 <code>wait 3000</code>，再輸入 <code>texts</code>。</li>
+        <li>如果還是沒有，手動複製 tGenie 回覆文字附近的非敏感文字。</li>
+        <li>記錄：<code>note latest_response_text atlas-ok</code>。</li>
+        <li>記錄：<code>note latest_response_rule texts did not expose the response; visible final response was atlas-ok</code>。</li>
+      </ol>
+
+      <h2>#5 實作判斷</h2>
+      <p>拿到 <code>latest_response</code> 後，#5 就可以往 <code>ready-for-agent</code> 推進。原因：</p>
+      <ul>
+        <li>建立新對話的 sidebar / new conversation 流程已知。</li>
+        <li>prompt input 已知。</li>
+        <li>目標模型已改成 <code>Gemini-3.1-Pro Preview</code>。</li>
+        <li>send/stop 生成狀態已知。</li>
+        <li>smoke test 已成功。</li>
+        <li>剩下只缺 adapter 要怎麼讀最新 tGenie 回覆。</li>
+      </ul>
+    </main>
+  </body>
+</html>

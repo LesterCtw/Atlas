@@ -83,6 +83,18 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("/login-done", readme)
         self.assertIn("Atlas 不會要求、儲存或處理密碼", readme)
 
+    def test_readme_explains_issue_5_probe_checklist(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("notes", readme)
+        self.assertIn("texts", readme)
+        self.assertIn("set_text latest_response", readme)
+        self.assertIn("smoke <prompt_input 編號> <send_button 編號>", readme)
+        self.assertIn("Gemini-3.1-Pro Preview", readme)
+        self.assertIn("stop_generating_hover_label", readme)
+        self.assertIn("latest_response_text", readme)
+        self.assertIn("smoke_result", readme)
+
     def test_readme_explains_skill_loader_usage(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

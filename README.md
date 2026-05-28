@@ -210,6 +210,16 @@ uv run python -m compileall atlas scripts tests
 
 成功時會看到類似 `Compiling` 或沒有錯誤訊息。
 
+## HITL 實機驗證
+
+如果需要到公司 Windows 電腦驗證 tGenie URL、手動登入、Chrome profile、probe selector 或 PDF attach UI，請使用 [`hitl.md`](hitl.md)。
+
+**這個做法是什麼**：`hitl.md` 是人工實機驗證 runbook，包含沒有 git 時只能用 GitHub issue 留言的回報格式。
+
+**為什麼這樣做**：tGenie 登入、SSO、真實 UI selector 和公司 Windows 環境無法由 AFK agent 自行驗證。
+
+**影響與取捨**：人工回報會多一步，但可以避免 agent 依靠猜測實作真實 tGenie adapter。
+
 ## 文字型 tool-call protocol
 
 Atlas v1 先使用文字型 protocol，讓沒有 native function calling 的 tGenie 也能要求 Atlas 執行工具。
@@ -465,11 +475,19 @@ probe>
 
 ```text
 targets
+notes
 list
+texts
 set sidebar_toggle <元素編號>
 click <元素編號>
+hover <元素編號>
+wait <毫秒>
+note <欄位> <觀察內容>
+set_text latest_response <文字區塊編號>
 set new_conversation <元素編號>
 type <元素編號> 測試訊息
+replace <元素編號> 測試訊息
+smoke <prompt_input 編號> <send_button 編號>
 set prompt_input <元素編號>
 set send_button <元素編號>
 set attach_button <元素編號>
@@ -501,8 +519,32 @@ done
 18. 輸入 `set model_selector <編號>`。
 19. 找出 web search 開關的編號。
 20. 輸入 `set web_search_toggle <編號>`。
-21. 輸入 `shot`，留一張人工截圖。
-22. 輸入 `done`，結束並輸出報告。
+21. 輸入 `notes`，看 #5 還缺哪些觀察欄位。
+22. 輸入 `note target_model Gemini-3.1-Pro Preview`，記錄 #5 目前要使用的模型。
+23. 輸入 `note default_model <畫面預設模型>`，記錄新對話預設模型。
+24. 點開 model selector，確認 `Gemini-3.1-Pro Preview` 能被選到。
+25. 輸入 `note selected_model Gemini-3.1-Pro Preview`。
+26. 在還沒輸入前，輸入 `note send_before_typing <你看到的 send 狀態>`。
+27. 輸入 `replace <prompt_input 編號> 測試訊息`，確認文字真的進入輸入框。
+28. 輸入 `note send_after_typing <你看到的 send 狀態>`。
+29. 輸入 `smoke <prompt_input 編號> <send_button 編號>`，送出固定測試 prompt：`Atlas smoke test. Reply with exactly: atlas-ok`。
+30. 生成中把滑鼠移到 send/stop button：`hover <send_button 編號>`。
+31. 如果畫面顯示 `Stop generating`，輸入 `note stop_generating_hover_label Stop generating`。
+32. 輸入 `note send_while_generating <生成中 send/stop 狀態>`。
+33. 等回覆完成後輸入 `note send_after_completion <完成後 send 狀態>`。
+34. 輸入 `texts`，列出可見文字區塊。
+35. 找到最新 assistant 回覆，輸入 `set_text latest_response <文字區塊編號>`。
+36. 輸入 `note latest_response_text atlas-ok`。
+37. 輸入 `note latest_response_rule <你如何判斷這是最新 assistant 回覆>`。
+38. 輸入 `note smoke_result success`。
+39. 輸入 `shot`，留一張人工截圖。
+40. 輸入 `done`，結束並輸出報告。
+
+**這個做法是什麼**：probe 不只記錄 selector，也會用 `notes` 和 `note` 把 #5 需要的人眼觀察寫進報告。
+
+**為什麼這樣做**：tGenie 有些狀態是 hover tooltip 或生成中短暫狀態，Playwright 不一定能自動讀到；讓 probe 明確要求你記錄，就不會漏掉。
+
+**影響與取捨**：公司畫面和截圖不用帶出來，只要把非敏感文字、selector hint、狀態描述寫進 `tgenie_probe_*.md`。取捨是操作步驟比原本多，但資訊足夠實作 #5 adapter。
 
 ### 4. 輸出檔案
 
@@ -586,19 +628,24 @@ py -3.12 -m venv .venv
 - new conversation 按鈕找得到。
 - prompt input 找得到。
 - send button 找得到。
+- model selector 找得到，且目前 #5 目標模型是 `Gemini-3.1-Pro Preview`。
 - 輸入測試訊息後，畫面真的有文字。
 - send button 在送出後是否會變成 stop generating。
 - 回覆完成後是否會變回 send。
+- smoke test 送出 `Atlas smoke test. Reply with exactly: atlas-ok` 後，tGenie 回覆 `atlas-ok`。
+- `texts` 能列出最新 assistant 回覆，並可用 `set_text latest_response <編號>` 記錄。
 
 成功標準：
 
-- `tgenie_probe_*.md` 裡面有 `sidebar_toggle`、`new_conversation`、`prompt_input`、`send_button`。
+- `tgenie_probe_*.md` 裡面有 `sidebar_toggle`、`new_conversation`、`prompt_input`、`send_button`、`model_selector`、`latest_response`。
+- `tgenie_probe_*.md` 的「#5 必填觀察」裡有 `target_model`、`selected_model`、`stop_generating_hover_label`、`latest_response_text`、`smoke_result`。
 - screenshot 看得出來停在 tGenie 對話頁。
 
 失敗時要記錄：
 
 - 哪個 target 找不到。
 - `list` 輸出的相關元素編號。
+- `texts` 輸出的相關文字區塊編號。
 - screenshot。
 - 你手動看到的按鈕文字。
 

@@ -148,12 +148,12 @@ class AtlasApp(App[None]):
             (prompt, "bold #ffffff"),
         )
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         self._write_agent_output("Atlas: Ready.")
-        self._start_tgenie_setup_if_needed()
+        await self._start_tgenie_setup_if_needed()
         self.query_one("#prompt", Input).focus()
 
-    def _start_tgenie_setup_if_needed(self) -> None:
+    async def _start_tgenie_setup_if_needed(self) -> None:
         if self.tgenie_config_store is None:
             return
         config = self.tgenie_config_store.load()
@@ -162,14 +162,14 @@ class AtlasApp(App[None]):
             self._write_agent_output("Atlas: tGenie URL is not configured. Paste the tGenie URL to continue.")
             return
         self._write_agent_output("Atlas: Using saved tGenie URL.")
-        self._open_tgenie_login(config.tgenie_url)
+        await self._open_tgenie_login(config.tgenie_url)
 
-    def _open_tgenie_login(self, url: str) -> None:
+    async def _open_tgenie_login(self, url: str) -> None:
         if self.tgenie_config_store is None or self.tgenie_browser_launcher is None:
             return
         self._write_agent_output("Atlas: Opening tGenie in system Chrome.")
         try:
-            self._tgenie_login_session = self.tgenie_browser_launcher.open_login_browser(
+            self._tgenie_login_session = await self.tgenie_browser_launcher.open_login_browser(
                 url=url,
                 profile_dir=self.tgenie_config_store.chrome_profile_dir,
             )
@@ -298,7 +298,7 @@ class AtlasApp(App[None]):
             self._history_index = None
         self._update_slash_suggestions(event.value.strip())
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
         prompt = event.value.strip()
         selected_command = self._selected_slash_option()
         if prompt.startswith("/") and selected_command is not None:
@@ -335,7 +335,7 @@ class AtlasApp(App[None]):
                 return
             self._awaiting_tgenie_url = False
             self._write_agent_output("Atlas: tGenie URL saved.")
-            self._open_tgenie_login(prompt)
+            await self._open_tgenie_login(prompt)
             return
 
         self._write_transcript(self._format_user_prompt(prompt), group="user")
