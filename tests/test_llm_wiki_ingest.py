@@ -11,7 +11,8 @@ class FakeIngestConversation:
     def __init__(self, responses: list[str]) -> None:
         self.responses = list(responses)
         self.sent_messages: list[str] = []
-        self.attached_pdfs: list[Path] = []
+        self.attached_files: list[Path] = []
+        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.sent_messages.append(user_prompt)
@@ -21,8 +22,11 @@ class FakeIngestConversation:
         self.sent_messages.append(message)
         return self.responses.pop(0)
 
+    async def attach_file(self, path: Path) -> None:
+        self.attached_files.append(path)
+
     async def attach_pdf(self, path: Path) -> None:
-        self.attached_pdfs.append(path)
+        await self.attach_file(path)
 
 
 class FailingSecondBatchConversation(FakeIngestConversation):

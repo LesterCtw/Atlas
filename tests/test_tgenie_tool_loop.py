@@ -13,7 +13,8 @@ class FakeAsyncTgenieConversation:
         self.responses = list(responses)
         self.attach_error = attach_error
         self.sent_messages: list[str] = []
-        self.attached_pdfs: list[Path] = []
+        self.attached_files: list[Path] = []
+        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.sent_messages.append(user_prompt)
@@ -23,10 +24,13 @@ class FakeAsyncTgenieConversation:
         self.sent_messages.append(message)
         return self.responses.pop(0)
 
-    async def attach_pdf(self, path: Path) -> None:
+    async def attach_file(self, path: Path) -> None:
         if self.attach_error is not None:
             raise self.attach_error
-        self.attached_pdfs.append(path)
+        self.attached_files.append(path)
+
+    async def attach_pdf(self, path: Path) -> None:
+        await self.attach_file(path)
 
 
 class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
@@ -238,6 +242,36 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"status": "uploaded"', conversation.sent_messages[1])
         self.assertIn('"path": "reports/case.pdf"', conversation.sent_messages[1])
 
+    async def test_real_tool_loop_attaches_workspace_image_with_file_attach(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            image_path = workspace / "photos" / "panel.png"
+            image_path.parent.mkdir()
+            image_path.write_bytes(b"\x89PNG\r\n")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "photos/panel.png"}}
+```""",
+                    "The image is attached.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach the panel image.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "The image is attached.")
+        self.assertEqual(conversation.attached_files, [image_path.resolve()])
+        self.assertIn("uploading-attachment", result.status_events)
+        self.assertIn("attachment-uploaded", result.status_events)
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
+        self.assertIn('"status": "uploaded"', conversation.sent_messages[1])
+        self.assertIn('"path": "photos/panel.png"', conversation.sent_messages[1])
+
     async def test_real_tool_loop_rejects_non_pdf_attach_before_browser_upload(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory)
@@ -265,6 +299,35 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
         self.assertIn('"ok": false', conversation.sent_messages[1])
         self.assertIn("only accepts .pdf", conversation.sent_messages[1])
+
+    async def test_real_tool_loop_rejects_unsupported_file_attach_before_browser_upload(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            note_path = workspace / "reports" / "case.txt"
+            note_path.parent.mkdir()
+            note_path.write_text("not attachable", encoding="utf-8")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "reports/case.txt"}}
+```""",
+                    "I need an attachable file instead.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach the case file.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "I need an attachable file instead.")
+        self.assertEqual(conversation.attached_files, [])
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
+        self.assertIn('"ok": false', conversation.sent_messages[1])
+        self.assertIn(".jpg", conversation.sent_messages[1])
+        self.assertIn(".png", conversation.sent_messages[1])
 
     async def test_real_tool_loop_rejects_invalid_pdf_paths_before_browser_upload(self) -> None:
         cases = {

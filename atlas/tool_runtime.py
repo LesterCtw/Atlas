@@ -7,6 +7,10 @@ import shlex
 from typing import Any
 
 
+ALLOWED_ATTACHMENT_SUFFIXES = frozenset({".pdf", ".jpg", ".jpeg", ".png"})
+ALLOWED_ATTACHMENT_SUFFIXES_TEXT = ".pdf, .jpg, .jpeg, or .png"
+
+
 @dataclass(frozen=True)
 class ToolResult:
     ok: bool
@@ -24,9 +28,12 @@ class ToolResult:
 
 
 @dataclass(frozen=True)
-class PdfAttachment:
+class FileAttachment:
     path: Path
     relative_path: str
+
+
+PdfAttachment = FileAttachment
 
 
 class ToolRuntime:
@@ -74,6 +81,16 @@ class ToolRuntime:
 
     def _relative_path(self, path: Path) -> str:
         return path.relative_to(self.workspace).as_posix()
+
+    def prepare_file_attachment(self, args: dict[str, Any]) -> FileAttachment:
+        path = self._resolve_workspace_path(str(args["path"]))
+        if path.suffix.lower() not in ALLOWED_ATTACHMENT_SUFFIXES:
+            raise ToolRuntimeError(f"Attachment only accepts {ALLOWED_ATTACHMENT_SUFFIXES_TEXT} files.")
+        if not path.exists():
+            raise FileNotFoundError
+        if path.is_dir():
+            raise IsADirectoryError
+        return FileAttachment(path=path, relative_path=self._relative_path(path))
 
     def prepare_pdf_attachment(self, args: dict[str, Any]) -> PdfAttachment:
         path = self._resolve_workspace_path(str(args["path"]))

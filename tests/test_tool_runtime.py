@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from atlas.tool_runtime import ToolRuntime
+from atlas.tool_runtime import ToolRuntime, ToolRuntimeError
 
 
 class ToolRuntimeTests(unittest.TestCase):
@@ -128,6 +128,32 @@ class ToolRuntimeTests(unittest.TestCase):
 
         self.assertTrue(result.ok, result.error)
         self.assertEqual(result.data["matches"], [])
+
+    def test_prepare_file_attachment_accepts_pdf_and_images(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            for file_name in ("report.pdf", "panel.jpg", "photo.jpeg", "diagram.png"):
+                (workspace / file_name).write_bytes(b"attachment")
+            runtime = ToolRuntime(workspace=workspace)
+
+            attachments = [
+                runtime.prepare_file_attachment({"path": file_name})
+                for file_name in ("report.pdf", "panel.jpg", "photo.jpeg", "diagram.png")
+            ]
+
+        self.assertEqual(
+            [attachment.relative_path for attachment in attachments],
+            ["report.pdf", "panel.jpg", "photo.jpeg", "diagram.png"],
+        )
+
+    def test_prepare_file_attachment_rejects_other_file_types(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "notes.txt").write_text("not attachable", encoding="utf-8")
+            runtime = ToolRuntime(workspace=workspace)
+
+            with self.assertRaisesRegex(ToolRuntimeError, r"\.pdf, \.jpg, \.jpeg, or \.png"):
+                runtime.prepare_file_attachment({"path": "notes.txt"})
 
     def test_shell_runs_low_risk_command_in_workspace(self) -> None:
         with TemporaryDirectory() as directory:

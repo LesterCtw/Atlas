@@ -22,6 +22,9 @@ class TgenieConversationClient(Protocol):
     async def send_followup(self, message: str) -> str:
         pass
 
+    async def attach_file(self, path: Path) -> None:
+        pass
+
     async def attach_pdf(self, path: Path) -> None:
         pass
 
@@ -55,8 +58,9 @@ Rules:
 - `args` must be a JSON object.
 - Request only one tool call at a time.
 - Do not claim that you have read, written, or executed local files unless Atlas returns a tool result.
-- Available tools include `file.list`, `file.read`, `file.search`, `file.write`, `shell.run`, and `pdf.attach`.
-- Use `pdf.attach` only for a workspace-local PDF path, for example `{{"path": "docs/report.pdf"}}`.
+- Available tools include `file.list`, `file.read`, `file.search`, `file.write`, `shell.run`, `file.attach`, and legacy `pdf.attach`.
+- Use `file.attach` for workspace-local attachment paths ending in `.pdf`, `.jpg`, `.jpeg`, or `.png`, for example `{{"path": "docs/report.pdf"}}` or `{{"path": "photos/panel.png"}}`.
+- `pdf.attach` is still accepted for workspace-local PDF paths, but prefer `file.attach`.
 
 Atlas will send tool output back to you as an `atlas.tool_result` fenced JSON block in a later turn. Continue from that result when it arrives.
 
@@ -86,8 +90,11 @@ class TgenieConversationAdapter:
     async def send_followup(self, message: str) -> str:
         return await self._send_message(message)
 
-    async def attach_pdf(self, path: Path) -> None:
+    async def attach_file(self, path: Path) -> None:
         await self._attach_files((path,))
+
+    async def attach_pdf(self, path: Path) -> None:
+        await self.attach_file(path)
 
     async def send_single_turn_with_attachments(
         self,

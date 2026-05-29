@@ -43,6 +43,7 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("file.read", readme)
         self.assertIn("file.search", readme)
         self.assertIn("file.write", readme)
+        self.assertIn("file.attach", readme)
         self.assertIn("pdf.attach", readme)
         self.assertIn("shell.run", readme)
 
@@ -55,6 +56,8 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("wiki/output/html/index.html", readme)
         self.assertIn("wiki/output/graph/index.html", readme)
         self.assertIn("workspace 內 `.pdf`", readme)
+        self.assertIn("`.jpg`", readme)
+        self.assertIn("`.png`", readme)
         self.assertIn("confirmation-required", readme)
         self.assertIn("rejected", readme)
 

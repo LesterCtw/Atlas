@@ -66,29 +66,35 @@ class PdfAttachTgenieAdapter:
     def __init__(
         self,
         requested_path: str = "case.pdf",
+        tool_name: str = "pdf.attach",
         attach_error: Exception | None = None,
         followup_response: str = "The PDF is attached.",
     ) -> None:
         self.requested_path = requested_path
+        self.tool_name = tool_name
         self.attach_error = attach_error
         self.followup_response = followup_response
         self.messages: list[str] = []
-        self.attached_pdfs: list[Path] = []
+        self.attached_files: list[Path] = []
+        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.messages.append(user_prompt)
         return f"""```json
-{{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {{"path": "{self.requested_path}"}}}}
+{{"type": "atlas.tool_call", "tool": "{self.tool_name}", "args": {{"path": "{self.requested_path}"}}}}
 ```"""
 
     async def send_followup(self, message: str) -> str:
         self.messages.append(message)
         return self.followup_response
 
-    async def attach_pdf(self, path: Path) -> None:
+    async def attach_file(self, path: Path) -> None:
         if self.attach_error is not None:
             raise self.attach_error
-        self.attached_pdfs.append(path)
+        self.attached_files.append(path)
+
+    async def attach_pdf(self, path: Path) -> None:
+        await self.attach_file(path)
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -327,6 +333,37 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(adapter.attached_pdfs, [(workspace / "case.pdf").resolve()])
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"status": "uploaded"', adapter.messages[1])
+
+    async def test_tui_shows_image_attach_upload_status(self) -> None:
+        adapter = PdfAttachTgenieAdapter(
+            requested_path="panel.png",
+            tool_name="file.attach",
+            followup_response="The image is attached.",
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "panel.png").write_bytes(b"\x89PNG\r\n")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Attach panel.png."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Uploading attachment", messages)
+                self.assertIn("Working: Attachment uploaded", messages)
+                self.assertIn("Atlas: The image is attached.", messages)
+
+        self.assertEqual(adapter.attached_files, [(workspace / "panel.png").resolve()])
+        self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"tool": "file.attach"', adapter.messages[1])
         self.assertIn('"status": "uploaded"', adapter.messages[1])
 
     async def test_tui_shows_pdf_attach_failure_status(self) -> None:

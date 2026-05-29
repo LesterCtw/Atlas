@@ -147,7 +147,7 @@
       <span class="tag">Windows 11</span>
       <span class="tag">Python 3.12</span>
       <h1>Atlas 部署與使用說明書</h1>
-      <p class="lede">Atlas 是一個 Python terminal 工具，用系統 Chrome 操作公司內部 tGenie，讓 tGenie 可以在單一 workspace 內讀檔、寫檔、上傳 PDF、產出 LLM Wiki 與 HTML 檢視。</p>
+      <p class="lede">Atlas 是一個 Python terminal 工具，用系統 Chrome 操作公司內部 tGenie，讓 tGenie 可以在單一 workspace 內讀檔、寫檔、上傳 PDF 或圖片附件、產出 LLM Wiki 與 HTML 檢視。</p>
     </main>
   </header>
 
@@ -249,12 +249,12 @@ atlas C:\path\to\workspace</code></pre>
       </tbody>
     </table>
 
-    <h3>PDF 摘要或分析</h3>
+    <h3>PDF 摘要或分析與圖片附件</h3>
     <table>
       <tbody>
-        <tr><th>Input</th><td>例如「請摘要 <code>docs/example.pdf</code>」。</td></tr>
-        <tr><th>Process</th><td>tGenie 要求 <code>pdf.attach</code>，Atlas 驗證 workspace-local PDF，然後透過 tGenie 網頁上傳。</td></tr>
-        <tr><th>Output</th><td>tGenie 讀取 PDF 後，Atlas TUI 顯示摘要或分析。</td></tr>
+        <tr><th>Input</th><td>例如「請摘要 <code>docs/example.pdf</code>」或「請看 <code>photos/panel.png</code>」。</td></tr>
+        <tr><th>Process</th><td>tGenie 要求 <code>file.attach</code>，Atlas 驗證 workspace-local <code>.pdf</code>、<code>.jpg</code>、<code>.jpeg</code> 或 <code>.png</code>，然後透過 tGenie 網頁上傳。</td></tr>
+        <tr><th>Output</th><td>tGenie 讀取 PDF 或圖片後，Atlas TUI 顯示摘要或分析。</td></tr>
       </tbody>
     </table>
 
@@ -295,7 +295,8 @@ atlas C:\path\to\workspace</code></pre>
     <ul>
       <li>Atlas 啟動時只綁定一個 workspace。</li>
       <li>檔案工具都只能操作 workspace 內 path。</li>
-      <li><code>pdf.attach</code> 只接受 workspace 內 <code>.pdf</code>。</li>
+      <li><code>file.attach</code> 只接受 workspace 內 <code>.pdf</code>、<code>.jpg</code>、<code>.jpeg</code>、<code>.png</code>。</li>
+      <li><code>pdf.attach</code> 保留給舊流程，只接受 workspace 內 <code>.pdf</code>。</li>
       <li>absolute path、<code>..</code> escape、指向 workspace 外的 path 會被拒絕。</li>
       <li><code>shell.run</code> 預設保守，大部分 command 會回傳 <code>confirmation-required</code>，高風險 command 會回傳 <code>rejected</code>。</li>
     </ul>
@@ -311,12 +312,12 @@ atlas C:\path\to\workspace</code></pre>
     <h3>Atlas 一直要求 <code>/login-done</code></h3>
     <p>先在 Chrome 裡完成 tGenie 登入，再回到 Atlas TUI 輸入 <code>/login-done</code>。</p>
 
-    <h3>PDF 上傳失敗</h3>
+    <h3>附件上傳失敗</h3>
     <ul>
       <li>確認檔案在 workspace 內。</li>
-      <li>確認副檔名是 <code>.pdf</code>。</li>
+      <li>確認副檔名是 <code>.pdf</code>、<code>.jpg</code>、<code>.jpeg</code> 或 <code>.png</code>。</li>
       <li>確認 path 沒有使用 absolute path 或 <code>..</code>。</li>
-      <li>確認 PDF 不含不該上傳的敏感資料。</li>
+      <li>確認附件不含不該上傳的敏感資料。</li>
     </ul>
 
     <h2>10. 維護者驗證</h2>

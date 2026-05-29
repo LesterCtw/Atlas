@@ -2,7 +2,7 @@
 
 Atlas 是一個 Python terminal 工具，用來把公司內部的網頁版 LLM（tGenie）接到本機 workspace。
 
-使用者在 terminal 執行 `atlas`，Atlas 會開啟系統 Chrome、連到 tGenie，並把使用者輸入、workspace 檔案工具、PDF 上傳、LLM Wiki 產出串成一個可操作的流程。
+使用者在 terminal 執行 `atlas`，Atlas 會開啟系統 Chrome、連到 tGenie，並把使用者輸入、workspace 檔案工具、附件上傳、LLM Wiki 產出串成一個可操作的流程。
 
 HTML 版部署與使用手冊在 [`atlas-deployment-and-usage.html`](atlas-deployment-and-usage.html)。
 
@@ -17,7 +17,7 @@ Atlas v1 提供：
 - 單一 workspace 邊界。
 - tGenie 對話與 tool loop。
 - workspace file tools：`file.list`、`file.read`、`file.search`、`file.write`。
-- workspace PDF attach：`pdf.attach`。
+- workspace attachment：`file.attach` 支援 `.pdf`、`.jpg`、`.jpeg`、`.png`；`pdf.attach` 保留給舊的 PDF-only 流程。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
 - LLM Wiki Markdown、HTML mirror、graph HTML 輸出。
@@ -30,8 +30,8 @@ Atlas v1 提供：
 - tGenie 登入必須由使用者在 Chrome 裡手動完成。
 - Atlas 不會要求、儲存或處理密碼、SSO token 或公司憑證。
 - v1 只支援單一 workspace、單一 tGenie conversation。
-- v1 的附件工具只支援 workspace 內的 `.pdf`。
-- v1 沒有 FastAPI、headless mode、packaged Windows exe、非 PDF 附件、embedding/vector database。
+- v1 的附件工具只支援 workspace 內的 `.pdf`、`.jpg`、`.jpeg`、`.png`。
+- v1 沒有 FastAPI、headless mode、packaged Windows exe、Office 附件、embedding/vector database。
 - `shell.run` 目前非常保守。需要確認或高風險的 command 不會直接執行。
 
 ## 部署需求
@@ -219,30 +219,31 @@ Output：
 
 影響與取捨：安全邊界比較清楚；取捨是不能直接操作 workspace 外的檔案。
 
-### 3. PDF 摘要或分析
+### 3. PDF 摘要或分析與圖片附件
 
 Input：
 
 - 例如：「請摘要 `docs/example.pdf`」。
+- 例如：「請看 `photos/panel.png`，說明圖片裡的異常點」。
 
 Process：
 
-1. tGenie 請求 `pdf.attach`。
-2. Atlas 確認 path 是 workspace 內的 `.pdf` 檔案。
-3. Atlas 透過 tGenie 網頁上傳 PDF。
+1. tGenie 請求 `file.attach`。
+2. Atlas 確認 path 是 workspace 內的 `.pdf`、`.jpg`、`.jpeg` 或 `.png` 檔案。
+3. Atlas 透過 tGenie 網頁上傳附件。
 4. Atlas 把上傳結果回貼給 tGenie。
-5. tGenie 讀取 PDF 後產生摘要或分析。
+5. tGenie 讀取 PDF 或圖片後產生摘要或分析。
 
 Output：
 
-- TUI 顯示 PDF 分析結果。
+- TUI 顯示 PDF 或圖片分析結果。
 - 如果任務要求產出檔案，結果會寫入 workspace。
 
-這個做法是什麼：Atlas 只允許 workspace-local PDF 透過 tGenie 原生附件功能上傳。
+這個做法是什麼：Atlas 只允許 workspace-local PDF、JPG、PNG 透過 tGenie 原生附件功能上傳。
 
-為什麼這樣做：PDF 內容可能敏感，先限制路徑和副檔名可以降低誤上傳風險。
+為什麼這樣做：附件內容可能敏感，先限制路徑和副檔名可以降低誤上傳風險。
 
-影響與取捨：只支援 PDF；Word、Excel、PowerPoint、圖片目前不支援。
+影響與取捨：支援 PDF 與常見圖片；Word、Excel、PowerPoint 目前不支援。
 
 ### 4. LLM Wiki 匯入
 
@@ -323,7 +324,8 @@ Workspace-local skill 位置：
 
 - Atlas 啟動時只綁定一個 workspace。
 - `file.list`、`file.read`、`file.search`、`file.write` 都只能操作 workspace 內 path。
-- `pdf.attach` 只接受 workspace 內 `.pdf`。
+- `file.attach` 只接受 workspace 內 `.pdf`、`.jpg`、`.jpeg`、`.png`。
+- `pdf.attach` 保留給舊流程，只接受 workspace 內 `.pdf`。
 - absolute path、`..` escape、指向 workspace 外的 path 會被拒絕。
 - `shell.run` 預設保守。大部分 command 會回傳 `confirmation-required`，高風險 command 會回傳 `rejected`。
 
@@ -347,14 +349,14 @@ Workspace-local skill 位置：
 
 先在 Chrome 裡完成 tGenie 登入，再回到 Atlas TUI 輸入 `/login-done`。
 
-### PDF 上傳失敗
+### 附件上傳失敗
 
 檢查：
 
 - 檔案在 workspace 裡。
-- 副檔名是 `.pdf`。
+- 副檔名是 `.pdf`、`.jpg`、`.jpeg` 或 `.png`。
 - path 沒有使用 absolute path 或 `..` 跳出 workspace。
-- PDF 不含不該上傳的敏感資料。
+- 附件不含不該上傳的敏感資料。
 
 ### `/llm-wiki ingest` 找不到檔案
 
