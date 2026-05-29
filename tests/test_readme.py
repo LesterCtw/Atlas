@@ -70,6 +70,17 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("AI 建議的初篩標記", readme)
         self.assertIn("不是量測級標註", readme)
 
+    def test_readme_explains_attachment_evidence_contract(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("Attachment evidence", readme)
+        self.assertIn("observation", readme)
+        self.assertIn("inference", readme)
+        self.assertIn("uncertainty", readme)
+        self.assertIn("confidence", readme)
+        self.assertIn("coordinates", readme)
+        self.assertIn("後續 workflow", readme)
+
     def test_docs_do_not_reference_removed_development_flows(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
         html = (ROOT / "atlas-deployment-and-usage.html").read_text(encoding="utf-8").lower()

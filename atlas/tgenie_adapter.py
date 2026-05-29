@@ -57,7 +57,8 @@ Rules:
 - The JSON must include `tool` and `args`.
 - `args` must be a JSON object.
 - Request only one tool call at a time.
-- Do not claim that you have read, written, or executed local files unless Atlas returns a tool result.
+- Do not claim that you have inspected, read, or understood local files unless Atlas provides file content, an attachment, or saved evidence in the conversation.
+- Preserve useful observations from attachments as structured evidence, including source identity, observation, inference, uncertainty, confidence, and coordinates when available.
 - Available tools include `file.list`, `file.read`, `file.search`, `file.write`, `shell.run`, `file.attach`, and legacy `pdf.attach`.
 - Use `file.attach` for workspace-local attachment paths ending in `.pdf`, `.jpg`, `.jpeg`, or `.png`, for example `{{"path": "docs/report.pdf"}}` or `{{"path": "photos/panel.png"}}`.
 - `pdf.attach` is still accepted for workspace-local PDF paths, but prefer `file.attach`.

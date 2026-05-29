@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from atlas.attachment_evidence import AttachmentEvidence
+
 
 _JSON_FENCE_PATTERN = re.compile(r"```json\s*(.*?)```", re.DOTALL)
 _SUPPORTED_STEM_SUFFIXES = frozenset({".jpg", ".jpeg"})
@@ -30,14 +32,21 @@ class FaStemCircle:
     center_x_percent: float
     center_y_percent: float
     radius_percent: float
-    reason: str
+    observation: str
+    inference: str
+    uncertainty: str
     confidence: str
+
+    @property
+    def reason(self) -> str:
+        return self.inference
 
 
 @dataclass(frozen=True)
 class FaStemBriefResult:
     report_path: Path
     selected_image: Path
+    evidence: AttachmentEvidence
     status_events: list[str]
 
 
@@ -72,6 +81,10 @@ async def run_fa_stem_brief(
 
     status_events.append("parsing-fa-stem-response")
     circle = parse_fa_stem_circle(model_response)
+    evidence = build_fa_stem_evidence(
+        source_id=selected_image.relative_to(workspace.resolve()).as_posix(),
+        circle=circle,
+    )
     status_events.append("writing-fa-stem-report")
     report_path = write_single_image_report(
         case_folder=case_folder,
@@ -82,6 +95,7 @@ async def run_fa_stem_brief(
     return FaStemBriefResult(
         report_path=report_path,
         selected_image=selected_image,
+        evidence=evidence,
         status_events=status_events,
     )
 
@@ -128,12 +142,15 @@ Return exactly one fenced JSON block with this shape:
   "center_x_percent": 50,
   "center_y_percent": 50,
   "radius_percent": 10,
-  "reason": "short visual reason",
+  "observation": "short description of what is visible in the image",
+  "inference": "short explanation of what the observation may mean",
+  "uncertainty": "short note about what is unclear or could be another cause",
   "confidence": "low | medium | high"
 }}
 ```
 
 Use percent coordinates relative to the image: x from left to right, y from top to bottom.
+Separate direct visual observations from inference. Preserve uncertainty even when confidence is high.
 Do not claim this is a final FA root cause. This is only an AI-suggested triage marker."""
 
 
@@ -154,11 +171,17 @@ def parse_fa_stem_circle(model_response: str) -> FaStemCircle:
             "center_x_percent",
             "center_y_percent",
             "radius_percent",
-            "reason",
             "confidence",
         )
         if field not in payload
     ]
+    observation = str(payload.get("observation") or payload.get("reason") or "")
+    inference = str(payload.get("inference") or payload.get("reason") or "")
+    uncertainty = str(payload.get("uncertainty") or "Uncertainty not provided by model.")
+    if not observation:
+        missing_fields.append("observation")
+    if not inference:
+        missing_fields.append("inference")
     if missing_fields:
         raise FaStemBriefError("tGenie JSON response is missing: " + ", ".join(missing_fields))
 
@@ -167,11 +190,30 @@ def parse_fa_stem_circle(model_response: str) -> FaStemCircle:
             center_x_percent=float(payload["center_x_percent"]),
             center_y_percent=float(payload["center_y_percent"]),
             radius_percent=float(payload["radius_percent"]),
-            reason=str(payload["reason"]),
+            observation=observation,
+            inference=inference,
+            uncertainty=uncertainty,
             confidence=str(payload["confidence"]),
         )
     except (TypeError, ValueError) as error:
         raise FaStemBriefError("tGenie JSON coordinates must be numeric percent values.") from error
+
+
+def build_fa_stem_evidence(*, source_id: str, circle: FaStemCircle) -> AttachmentEvidence:
+    return AttachmentEvidence(
+        source_id=source_id,
+        observation=circle.observation,
+        inference=circle.inference,
+        uncertainty=circle.uncertainty,
+        confidence=circle.confidence,
+        coordinates=(
+            {
+                "center_x_percent": circle.center_x_percent,
+                "center_y_percent": circle.center_y_percent,
+                "radius_percent": circle.radius_percent,
+            },
+        ),
+    )
 
 
 def write_single_image_report(

@@ -4,7 +4,26 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from atlas.fa_stem import FaStemBriefError, parse_fa_stem_circle, select_single_stem_image
+from atlas.fa_stem import (
+    FaStemBriefError,
+    parse_fa_stem_circle,
+    run_fa_stem_brief,
+    select_single_stem_image,
+)
+
+
+class RecordingFaStemConversation:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.attached_files: list[Path] = []
+        self.prompts: list[str] = []
+
+    async def attach_file(self, path: Path) -> None:
+        self.attached_files.append(path)
+
+    async def send_single_turn(self, user_prompt: str) -> str:
+        self.prompts.append(user_prompt)
+        return self.response
 
 
 class FaStemBriefTests(unittest.TestCase):
@@ -56,6 +75,58 @@ class FaStemBriefTests(unittest.TestCase):
             selected = select_single_stem_image(case_folder)
 
         self.assertEqual(selected, selected_image.resolve())
+
+
+class FaStemBriefWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_single_image_brief_records_attachment_evidence(self) -> None:
+        conversation = RecordingFaStemConversation(
+            """```json
+{
+  "center_x_percent": 25,
+  "center_y_percent": 40,
+  "radius_percent": 12,
+  "observation": "Dark void-like contrast appears near the via edge.",
+  "inference": "This may indicate missing material near the electrical path.",
+  "uncertainty": "The contrast could also come from sample preparation.",
+  "confidence": "medium"
+}
+```"""
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            case_folder = workspace / "case-a"
+            case_folder.mkdir()
+            selected_image = case_folder / "a-first.jpg"
+            selected_image.write_bytes(b"fake jpg")
+
+            result = await run_fa_stem_brief(
+                workspace=workspace,
+                case_folder=case_folder,
+                case_background="Leakage fails at VDD after stress.",
+                conversation=conversation,
+            )
+
+        self.assertEqual(conversation.attached_files, [selected_image.resolve()])
+        self.assertIn("observation", conversation.prompts[0])
+        self.assertIn("inference", conversation.prompts[0])
+        self.assertIn("uncertainty", conversation.prompts[0])
+
+        self.assertEqual(result.evidence.source_id, "case-a/a-first.jpg")
+        self.assertEqual(
+            result.evidence.observation,
+            "Dark void-like contrast appears near the via edge.",
+        )
+        self.assertEqual(
+            result.evidence.inference,
+            "This may indicate missing material near the electrical path.",
+        )
+        self.assertEqual(
+            result.evidence.uncertainty,
+            "The contrast could also come from sample preparation.",
+        )
+        self.assertEqual(result.evidence.confidence, "medium")
+        self.assertEqual(result.evidence.coordinates[0]["center_x_percent"], 25.0)
 
 
 if __name__ == "__main__":

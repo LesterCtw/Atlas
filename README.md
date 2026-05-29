@@ -18,6 +18,7 @@ Atlas v1 提供：
 - tGenie 對話與 tool loop。
 - workspace file tools：`file.list`、`file.read`、`file.search`、`file.write`。
 - workspace attachment：`file.attach` 支援 `.pdf`、`.jpg`、`.jpeg`、`.png`；`pdf.attach` 保留給舊的 PDF-only 流程。
+- Attachment evidence 結構化證據，用來保存附件回合中的 observation、inference、uncertainty、confidence 與 coordinates。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
 - FA STEM 單張影像初篩 tracer 報告。
@@ -247,7 +248,31 @@ Output：
 
 影響與取捨：支援 PDF 與常見圖片；Word、Excel、PowerPoint 目前不支援。
 
-### 4. FA STEM brief 單張影像初篩 tracer
+### 4. Attachment evidence 結構化證據
+
+Input：
+
+- 任何需要分析附件的 workflow，例如圖片初篩、PDF 摘要或後續多步驟分析。
+
+Process：
+
+1. Atlas 在附件回合中保留可重用的文字證據。
+2. 每筆 evidence 會記錄來源影像或附件 identity、`observation`、`inference`、`uncertainty`、`confidence`。
+3. 如果模型有回傳位置資訊，Atlas 也會保存 `coordinates`，例如百分比座標與半徑。
+4. 後續 workflow 可以把這些 saved text evidence 放進 prompt，不需要假設模型仍然看得到前一次附件。
+
+Output：
+
+- workflow 內可重用的 structured evidence。
+- 後續 prompt 可讀的 saved text evidence。
+
+這個做法是什麼：Attachment evidence 是 Atlas harness 層的資料合約，把「模型看過附件後的有用觀察」保存成結構化文字。
+
+為什麼這樣做：tGenie 是透過網頁附件看檔案；後續 workflow 需要穩定文字證據，不能只依賴前一輪視覺上下文。
+
+影響與取捨：後續 workflow 比較容易追蹤來源、區分 observation 和 inference，也能保留 uncertainty。取捨是 evidence 是文字摘要，不等於原始附件本身；若後續步驟需要重新檢查細節，仍應由 Atlas workflow 重新提供附件或檔案內容。
+
+### 5. FA STEM brief 單張影像初篩 tracer
 
 Input：
 
@@ -263,8 +288,8 @@ Process：
 2. Atlas 等待下一個非空 prompt，並把它當作 FA STEM case background。
 3. Atlas 從資料夾中用固定排序選一張 `.jpg` 或 `.jpeg`。
 4. Atlas 將該影像 attach 給 tGenie。
-5. tGenie 依照 FA STEM prompt 回傳 fenced JSON，包含 `center_x_percent`、`center_y_percent`、`radius_percent`、`reason`、`confidence`。
-6. Atlas 解析 JSON，並在 case folder 內寫出 HTML report。
+5. tGenie 依照 FA STEM prompt 回傳 fenced JSON，包含 `center_x_percent`、`center_y_percent`、`radius_percent`、`observation`、`inference`、`uncertainty`、`confidence`。
+6. Atlas 解析 JSON，記錄 Attachment evidence，並在 case folder 內寫出 HTML report。
 
 Output：
 
@@ -276,7 +301,7 @@ Output：
 
 影響與取捨：報告中的圈選是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。這個 tracer 目前不做多張影像排序、9-image Photo Bundle、profile anomaly 分類或真實 case validation。
 
-### 5. LLM Wiki 匯入
+### 6. LLM Wiki 匯入
 
 Input：
 
@@ -314,7 +339,7 @@ Output：
 
 影響與取捨：每批 1 個 PDF 比較慢，但比較穩，較不容易讓 tGenie context 或附件流程失控。
 
-### 6. Skill 使用
+### 7. Skill 使用
 
 Input：
 

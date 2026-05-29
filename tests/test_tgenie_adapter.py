@@ -149,12 +149,21 @@ class TgenieAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"tool": "tool.name"', prompt)
         self.assertIn('"args": {}', prompt)
         self.assertIn("Request only one tool call at a time", prompt)
+        self.assertIn(
+            "unless Atlas provides file content, an attachment, or saved evidence",
+            prompt,
+        )
+        self.assertIn("Preserve useful observations from attachments as structured evidence", prompt)
         self.assertIn("atlas.tool_result", prompt)
         self.assertIn("file.attach", prompt)
         self.assertIn("pdf.attach", prompt)
         self.assertIn(".jpg", prompt)
         self.assertIn(".png", prompt)
         self.assertIn("Summarize README.md", prompt)
+        self.assertNotIn("senior semiconductor", prompt)
+        self.assertNotIn("FA STEM", prompt)
+        self.assertNotIn("one attachment per turn", prompt)
+        self.assertNotIn("attachment lifetime", prompt)
 
     async def test_adapter_sends_prompt_in_current_conversation_by_default(self) -> None:
         page = FakePage(new_conversation_visible=False, stop_visible=False)
