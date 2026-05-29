@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from PIL import Image
 from atlas.fake_loop import FakeTgenieAdapter
 from atlas.tgenie_adapter import TgenieConversationError
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError
@@ -441,15 +442,20 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(adapter.prompts, [])
 
-    async def test_fa_stem_brief_background_creates_single_image_report(self) -> None:
+    async def test_fa_stem_brief_background_creates_first_pass_bundle_report(self) -> None:
         adapter = FaStemBriefTgenieAdapter(
             """```json
 {
-  "center_x_percent": 25,
-  "center_y_percent": 40,
-  "radius_percent": 12,
-  "reason": "Void-like contrast near the via edge.",
-  "confidence": "medium"
+  "candidate_observations": [
+    {
+      "tile_label": "A1",
+      "observation": "Void-like contrast near the via edge.",
+      "inference": "This may indicate missing material.",
+      "uncertainty": "The contrast could also come from sample preparation.",
+      "confidence": "medium",
+      "coordinates": [{"center_x_percent": 25, "center_y_percent": 40, "radius_percent": 12}]
+    }
+  ]
 }
 ```"""
         )
@@ -459,8 +465,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
             case_folder = workspace / "case-a"
             case_folder.mkdir()
             selected_image = case_folder / "a-first.jpg"
-            selected_image.write_bytes(b"fake jpg")
-            (case_folder / "z-later.jpeg").write_bytes(b"fake jpeg")
+            Image.new("RGB", (32, 24), color=(180, 20, 20)).save(selected_image)
+            Image.new("RGB", (32, 24), color=(20, 20, 180)).save(case_folder / "z-later.jpeg")
             app = AtlasApp(
                 workspace=workspace,
                 tgenie_adapter=adapter,
@@ -480,18 +486,19 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
             report = case_folder / "atlas-fa-stem-brief.html"
             report_html = report.read_text(encoding="utf-8")
 
-        self.assertEqual(adapter.attached_files, [selected_image.resolve()])
+        self.assertEqual(len(adapter.attached_files), 1)
+        self.assertEqual(adapter.attached_files[0].suffix, ".png")
         self.assertEqual(len(adapter.prompts), 1)
         self.assertIn("senior semiconductor process failure analysis engineer", adapter.prompts[0])
         self.assertIn("Leakage fails at VDD after stress.", adapter.prompts[0])
-        self.assertIn("center_x_percent", adapter.prompts[0])
+        self.assertIn("candidate_observations", adapter.prompts[0])
+        self.assertIn("A1: case-a/a-first.jpg", adapter.prompts[0])
         self.assertIn("a-first.jpg", report_html)
+        self.assertIn("z-later.jpeg", report_html)
         self.assertIn("Leakage fails at VDD after stress.", report_html)
         self.assertIn("Void-like contrast near the via edge.", report_html)
         self.assertIn("medium", report_html)
-        self.assertIn("left: 25.0%;", report_html)
-        self.assertIn("top: 40.0%;", report_html)
-        self.assertIn("width: 24.0%;", report_html)
+        self.assertIn("first-pass candidate observations", report_html)
 
     async def test_fa_stem_brief_empty_folder_shows_clear_error(self) -> None:
         adapter = FaStemBriefTgenieAdapter("{}")

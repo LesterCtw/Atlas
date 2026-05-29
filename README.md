@@ -21,7 +21,7 @@ Atlas v1 提供：
 - Attachment evidence 結構化證據，用來保存附件回合中的 observation、inference、uncertainty、confidence 與 coordinates。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
-- FA STEM 單張影像初篩 tracer 報告。
+- FA STEM folder-level first-pass triage，使用 3x3 Photo Bundle 產生 candidate observations。
 - LLM Wiki Markdown、HTML mirror、graph HTML 輸出。
 
 ## 重要限制
@@ -272,7 +272,7 @@ Output：
 
 影響與取捨：後續 workflow 比較容易追蹤來源、區分 observation 和 inference，也能保留 uncertainty。取捨是 evidence 是文字摘要，不等於原始附件本身；若後續步驟需要重新檢查細節，仍應由 Atlas workflow 重新提供附件或檔案內容。
 
-### 5. FA STEM brief 單張影像初篩 tracer
+### 5. FA STEM brief folder-level first-pass triage
 
 Input：
 
@@ -286,20 +286,23 @@ Process：
 
 1. Atlas 驗證資料夾必須在 workspace 內。
 2. Atlas 等待下一個非空 prompt，並把它當作 FA STEM case background。
-3. Atlas 從資料夾中用固定排序選一張 `.jpg` 或 `.jpeg`。
-4. Atlas 將該影像 attach 給 tGenie。
-5. tGenie 依照 FA STEM prompt 回傳 fenced JSON，包含 `center_x_percent`、`center_y_percent`、`radius_percent`、`observation`、`inference`、`uncertainty`、`confidence`。
-6. Atlas 解析 JSON，記錄 Attachment evidence，並在 case folder 內寫出 HTML report。
+3. Atlas recursive 收集資料夾底下的 `.jpg` 與 `.jpeg`，忽略其他檔案。
+4. Atlas 用固定排序把影像每 9 張組成一個 3x3 Photo Bundle，最後不足 9 張也會形成 partial bundle。
+5. 每個 tile 會有 A1 到 C3 的 label，並保留 tile-to-source mapping 回原始影像 path。
+6. Atlas 將每個 Photo Bundle attach 給 tGenie。
+7. tGenie 依照 FA STEM prompt 回傳 fenced JSON `candidate_observations`，包含 `tile_label`、`observation`、`inference`、`uncertainty`、`confidence` 與 optional `coordinates`。
+8. Atlas 解析 JSON，記錄 Attachment evidence 與 covered source images，並在 case folder 內寫出 first-pass HTML report。
 
 Output：
 
 - `<case-folder>/atlas-fa-stem-brief.html`
+- `<case-folder>/atlas-fa-stem-bundles/photo-bundle-XXX.png`
 
-這個做法是什麼：這是一條最小 demo tracer，先證明「資料夾指令 → case background → 單張 STEM 影像 → AI 圈選建議 → HTML 報告」可以跑通。
+這個做法是什麼：這是一條 folder-level first-pass triage 流程，先把整個 STEM JPG 資料夾壓成可追蹤來源的 3x3 Photo Bundle，再請 tGenie 回傳 candidate observations。
 
-為什麼這樣做：先用單張影像降低風險，確認 TUI 狀態、tGenie attachment、JSON parsing 與 HTML report 都能串起來，再擴充到多圖 batching。
+為什麼這樣做：tGenie 一次只能穩定看有限附件；bundle 讓 Atlas 用較少回合掃過多張影像，同時用 tile-to-source mapping 保留每個觀察對應的原圖。
 
-影響與取捨：報告中的圈選是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。這個 tracer 目前不做多張影像排序、9-image Photo Bundle、profile anomaly 分類或真實 case validation。
+影響與取捨：輸出是 first-pass candidate observations，不是 final conclusions。報告中的觀察是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。這個 slice 目前不做候選原圖 second-pass review、full-case final ranking、profile anomaly 分類或真實 case validation。
 
 ### 6. LLM Wiki 匯入
 

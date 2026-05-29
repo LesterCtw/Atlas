@@ -29,7 +29,7 @@ STATUS_MESSAGES = {
     "ingest-batch-failed": "Working: Ingestion batch failed",
     "rendering-html": "Working: Rendering HTML mirror",
     "rendering-graph": "Working: Rendering graph",
-    "selecting-fa-stem-image": "Working: Selecting STEM image",
+    "selecting-fa-stem-image": "Working: Selecting STEM images",
     "parsing-fa-stem-response": "Working: Parsing FA STEM response",
     "writing-fa-stem-report": "Working: Writing FA STEM report",
     "waiting-for-model": "Working: Waiting for model",

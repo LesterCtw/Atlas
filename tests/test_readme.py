@@ -67,6 +67,10 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("/fa-stem brief <workspace-relative-folder>", readme)
         self.assertIn("atlas-fa-stem-brief.html", readme)
         self.assertIn("case background", readme)
+        self.assertIn("3x3 Photo Bundle", readme)
+        self.assertIn("recursive", readme)
+        self.assertIn("candidate observations", readme)
+        self.assertIn("不是 final conclusions", readme)
         self.assertIn("AI 建議的初篩標記", readme)
         self.assertIn("不是量測級標註", readme)
 

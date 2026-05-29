@@ -8,7 +8,7 @@ from atlas.wiki import initialize_wiki
 
 BUILTIN_COMMANDS_MESSAGE = (
     "Available commands: /help for help, /exit to quit Atlas, "
-    "/fa-stem brief <workspace-relative-folder> for single-image FA STEM reports."
+    "/fa-stem brief <workspace-relative-folder> for folder-level FA STEM first-pass triage."
 )
 
 
