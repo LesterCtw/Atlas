@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas 部署與使用說明書</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090909;
+      --panel: #141414;
+      --panel-2: #1c1c1c;
+      --text: #f7f7f7;
+      --muted: #a3a3a3;
+      --line: #2b2b2b;
+      --accent: #0099ff;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+    header {
+      padding: 48px 24px 28px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #141414 0%, #090909 100%);
+    }
+    main {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+    }
+    h1, h2, h3 { line-height: 1.2; margin: 0 0 14px; }
+    h1 { font-size: 40px; letter-spacing: 0; }
+    h2 { font-size: 26px; margin-top: 42px; padding-top: 12px; border-top: 1px solid var(--line); }
+    h3 { font-size: 20px; margin-top: 26px; }
+    p { margin: 0 0 14px; color: var(--text); }
+    a { color: var(--accent); }
+    .lede { max-width: 820px; color: var(--muted); font-size: 18px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card strong { color: var(--text); }
+    .muted { color: var(--muted); }
+    code {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #ffffff;
+    }
+    pre {
+      overflow-x: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      color: #ffffff;
+    }
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--panel); }
+    tr:last-child td { border-bottom: 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .workflow {
+      counter-reset: step;
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .step {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 16px 16px 52px;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 16px;
+      top: 18px;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #00111f;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+    .tag {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-right: 6px;
+    }
+    .notice {
+      border-left: 4px solid var(--warn);
+      background: #1a1408;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <main>
+      <span class="tag">Atlas v1</span>
+      <span class="tag">Windows 11</span>
+      <span class="tag">Python 3.12</span>
+      <h1>Atlas 部署與使用說明書</h1>
+      <p class="lede">Atlas 是一個 Python terminal 工具，用系統 Chrome 操作公司內部 tGenie，讓 tGenie 可以在單一 workspace 內讀檔、寫檔、上傳 PDF、產出 LLM Wiki 與 HTML 檢視。</p>
+    </main>
+  </header>
+
+  <main>
+    <h2>1. 這份手冊適用範圍</h2>
+    <div class="grid">
+      <div class="card"><strong>正式入口</strong><br><span class="muted"><code>atlas</code> terminal TUI。</span></div>
+      <div class="card"><strong>主要環境</strong><br><span class="muted">Windows 11、Python 3.12.x、Google Chrome。</span></div>
+      <div class="card"><strong>主要輸出</strong><br><span class="muted">TUI 回覆、workspace 檔案、LLM Wiki Markdown、HTML、graph。</span></div>
+    </div>
+
+    <h2>2. 部署需求</h2>
+    <ul>
+      <li>Windows 11。</li>
+      <li>Python 3.12.x。</li>
+      <li>Google Chrome。</li>
+      <li>可開啟 tGenie 的公司網路與 tGenie URL。</li>
+      <li>PowerShell。</li>
+    </ul>
+    <pre><code>py -3.12 --version</code></pre>
+
+    <div class="notice">
+      Atlas 使用系統 Chrome，不使用 Playwright 下載的瀏覽器。tGenie 登入由使用者在 Chrome 裡手動完成，Atlas 不會處理密碼或 SSO 憑證。
+    </div>
+
+    <h2>3. Windows 部署步驟</h2>
+    <p>在 Atlas 專案資料夾執行：</p>
+    <pre><code>py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install -e .
+.\.venv\Scripts\atlas --help</code></pre>
+
+    <p>啟動 Atlas：</p>
+    <pre><code>.\.venv\Scripts\atlas</code></pre>
+
+    <p>指定 workspace：</p>
+    <pre><code>.\.venv\Scripts\atlas C:\path\to\workspace</code></pre>
+
+    <h3>從任意 PowerShell 執行</h3>
+    <pre><code>$atlasScripts = "$PWD\.venv\Scripts"
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+[Environment]::SetEnvironmentVariable("Path", "$atlasScripts;$userPath", "User")</code></pre>
+    <p>關掉 PowerShell 並重新開啟後，可以執行：</p>
+    <pre><code>atlas
+atlas C:\path\to\workspace</code></pre>
+
+    <h2>4. 第一次啟動</h2>
+    <div class="workflow">
+      <div class="step"><strong>啟動</strong><br>在 workspace 目錄執行 <code>atlas</code>，或執行 <code>atlas &lt;workspace-path&gt;</code>。</div>
+      <div class="step"><strong>貼上 tGenie URL</strong><br>如果尚未設定，Atlas TUI 會要求你貼上 tGenie URL。</div>
+      <div class="step"><strong>Chrome 登入</strong><br>Atlas 開啟系統 Chrome。你在 Chrome 裡手動登入 tGenie。</div>
+      <div class="step"><strong>回到 TUI</strong><br>登入完成後輸入 <code>/login-done</code>。</div>
+    </div>
+
+    <p>使用者設定位置：</p>
+    <table>
+      <thead><tr><th>系統</th><th>位置</th></tr></thead>
+      <tbody>
+        <tr><td>Windows</td><td><code>%APPDATA%\Atlas</code></td></tr>
+        <tr><td>macOS</td><td><code>~/Library/Application Support/Atlas</code></td></tr>
+        <tr><td>Linux</td><td><code>$XDG_CONFIG_HOME/Atlas</code>，沒有時使用 <code>~/.config/Atlas</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. 基本使用</h2>
+    <ul>
+      <li>輸入問題或任務，按 <code>Enter</code> 送出。</li>
+      <li><code>Shift+Enter</code> 插入換行。</li>
+      <li>空白輸入框中用上下方向鍵瀏覽送出歷史。</li>
+      <li>輸入 <code>/</code> 會顯示 slash command 選單。</li>
+    </ul>
+
+    <pre><code>/help
+/exit
+/login-done
+/llm-wiki
+/llm-wiki ingest &lt;workspace-pdf-or-directory&gt;
+/skill-creator</code></pre>
+
+    <h2>6. Input to Output Workflow</h2>
+
+    <h3>一般對話</h3>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td>使用者在 Atlas TUI 輸入 prompt。</td></tr>
+        <tr><th>Process</th><td>Atlas 送到 tGenie。tGenie 直接回答，或用 <code>atlas.tool_call</code> 要求本機工具。Atlas 執行工具後回貼 <code>atlas.tool_result</code>。</td></tr>
+        <tr><th>Output</th><td>TUI 顯示 <code>Working:</code> 狀態與最後 <code>Atlas:</code> 回覆。若使用 <code>file.write</code>，workspace 會產生或更新檔案。</td></tr>
+      </tbody>
+    </table>
+    <p><strong>做法：</strong>tGenie 負責推理，Atlas 負責本機工具。</p>
+    <p><strong>原因：</strong>網頁版 tGenie 不一定有 native function calling，文字型 tool-call protocol 可以先完成本機 agent workflow。</p>
+    <p><strong>影響與取捨：</strong>安全邊界清楚；一次只處理一個 tool call，速度較慢但較穩。</p>
+
+    <h3>Workspace 檔案工作</h3>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td>要求讀檔、搜尋、整理或產出檔案。</td></tr>
+        <tr><th>Process</th><td>Atlas 只允許 <code>file.list</code>、<code>file.read</code>、<code>file.search</code>、<code>file.write</code> 操作 workspace 內 path。</td></tr>
+        <tr><th>Output</th><td>回答顯示在 TUI；檔案輸出寫在 workspace 內。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>PDF 摘要或分析</h3>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td>例如「請摘要 <code>docs/example.pdf</code>」。</td></tr>
+        <tr><th>Process</th><td>tGenie 要求 <code>pdf.attach</code>，Atlas 驗證 workspace-local PDF，然後透過 tGenie 網頁上傳。</td></tr>
+        <tr><th>Output</th><td>tGenie 讀取 PDF 後，Atlas TUI 顯示摘要或分析。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>LLM Wiki 匯入</h3>
+    <pre><code>/llm-wiki ingest docs/example.pdf
+/llm-wiki ingest docs/pdf-folder</code></pre>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td>單一 PDF 或 workspace 內 PDF 資料夾。</td></tr>
+        <tr><th>Process</th><td>Atlas 初始化 <code>wiki/</code>，每批 1 個 PDF 送給 tGenie，讓 tGenie 更新 wiki Markdown，最後重新產生 HTML mirror 與 graph。</td></tr>
+        <tr><th>Output</th><td><code>wiki/index.md</code>、<code>wiki/log.md</code>、<code>wiki/pages/</code>、<code>wiki/output/html/index.html</code>、<code>wiki/output/graph/index.html</code>。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Skill 使用</h3>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td><code>/llm-wiki</code> 或 <code>/skill-creator</code>。</td></tr>
+        <tr><th>Process</th><td>Atlas 載入內建或 workspace-local skill instructions。</td></tr>
+        <tr><th>Output</th><td>TUI 顯示 skill 已載入；後續 prompt 依該 skill 工作。</td></tr>
+      </tbody>
+    </table>
+
+    <h2>7. 主要輸出位置</h2>
+    <table>
+      <thead><tr><th>輸出</th><th>位置</th></tr></thead>
+      <tbody>
+        <tr><td>一般回答</td><td>Atlas TUI transcript</td></tr>
+        <tr><td>模型要求寫入的檔案</td><td>workspace 內指定 path</td></tr>
+        <tr><td>LLM Wiki Markdown</td><td><code>wiki/index.md</code>、<code>wiki/log.md</code>、<code>wiki/pages/</code></td></tr>
+        <tr><td>LLM Wiki HTML</td><td><code>wiki/output/html/index.html</code></td></tr>
+        <tr><td>LLM Wiki graph</td><td><code>wiki/output/graph/index.html</code></td></tr>
+        <tr><td>tGenie URL 與 Chrome profile</td><td>使用者全域設定區域</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. Workspace 安全規則</h2>
+    <ul>
+      <li>Atlas 啟動時只綁定一個 workspace。</li>
+      <li>檔案工具都只能操作 workspace 內 path。</li>
+      <li><code>pdf.attach</code> 只接受 workspace 內 <code>.pdf</code>。</li>
+      <li>absolute path、<code>..</code> escape、指向 workspace 外的 path 會被拒絕。</li>
+      <li><code>shell.run</code> 預設保守，大部分 command 會回傳 <code>confirmation-required</code>，高風險 command 會回傳 <code>rejected</code>。</li>
+    </ul>
+
+    <h2>9. 常見問題</h2>
+    <h3><code>atlas</code> 找不到</h3>
+    <p>如果尚未設定 PATH，請使用：</p>
+    <pre><code>.\.venv\Scripts\atlas</code></pre>
+
+    <h3>Chrome 沒有開啟</h3>
+    <p>確認公司電腦已安裝 Google Chrome，且公司政策允許本機 Python 程式開啟 Chrome。</p>
+
+    <h3>Atlas 一直要求 <code>/login-done</code></h3>
+    <p>先在 Chrome 裡完成 tGenie 登入，再回到 Atlas TUI 輸入 <code>/login-done</code>。</p>
+
+    <h3>PDF 上傳失敗</h3>
+    <ul>
+      <li>確認檔案在 workspace 內。</li>
+      <li>確認副檔名是 <code>.pdf</code>。</li>
+      <li>確認 path 沒有使用 absolute path 或 <code>..</code>。</li>
+      <li>確認 PDF 不含不該上傳的敏感資料。</li>
+    </ul>
+
+    <h2>10. 維護者驗證</h2>
+    <pre><code>uv run --with pytest pytest
+python -m compileall atlas</code></pre>
+  </main>
+</body>
+</html>
