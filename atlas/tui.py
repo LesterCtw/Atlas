@@ -8,6 +8,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Input, RichLog, Static
 
 from atlas.commands import handle_slash_command
+from atlas.fa_stem import FaStemBriefError, run_fa_stem_brief
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
 from atlas.llm_wiki_ingest import LlmWikiIngestError, run_llm_wiki_ingest
 from atlas.skills import SkillLoader
@@ -28,6 +29,9 @@ STATUS_MESSAGES = {
     "ingest-batch-failed": "Working: Ingestion batch failed",
     "rendering-html": "Working: Rendering HTML mirror",
     "rendering-graph": "Working: Rendering graph",
+    "selecting-fa-stem-image": "Working: Selecting STEM image",
+    "parsing-fa-stem-response": "Working: Parsing FA STEM response",
+    "writing-fa-stem-report": "Working: Writing FA STEM report",
     "waiting-for-model": "Working: Waiting for model",
     "parsing-tool-call": "Working: Parsing tool call",
     "executing-tool": "Working: Executing tool",
@@ -130,6 +134,7 @@ class AtlasApp(App[None]):
         self._tgenie_login_session: object | None = None
         self._awaiting_tgenie_url = False
         self._awaiting_tgenie_login = False
+        self._pending_fa_stem_folder: Path | None = None
         self.slash_options: list[str] = []
         self.selected_slash_index = 0
         self._transcript_group: str | None = None
@@ -175,6 +180,21 @@ class AtlasApp(App[None]):
             (prompt, "bold #ffffff"),
         )
 
+    def _resolve_workspace_folder(self, raw_path: str) -> Path:
+        path = Path(raw_path)
+        if path.is_absolute():
+            raise ValueError("Path must stay inside the workspace.")
+        resolved = (self.workspace / path).resolve()
+        try:
+            resolved.relative_to(self.workspace.resolve())
+        except ValueError as error:
+            raise ValueError("Path must stay inside the workspace.") from error
+        if not resolved.exists():
+            raise ValueError("Folder not found.")
+        if not resolved.is_dir():
+            raise ValueError("Path is not a folder.")
+        return resolved
+
     async def on_mount(self) -> None:
         self._write_agent_output("Atlas: Ready.")
         await self._start_tgenie_setup_if_needed()
@@ -215,7 +235,7 @@ class AtlasApp(App[None]):
 
     def _available_slash_options(self, value: str = "/") -> list[str]:
         skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
-        options = [*BASE_SLASH_OPTIONS, *skill_options]
+        options = [*BASE_SLASH_OPTIONS, *skill_options, "/fa-stem brief"]
         if self._awaiting_tgenie_login:
             options.append("/login-done")
         if value == "/":
@@ -356,9 +376,44 @@ class AtlasApp(App[None]):
             self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done before sending prompts.")
             return
 
+        if self._pending_fa_stem_folder is not None:
+            case_folder = self._pending_fa_stem_folder
+            self._pending_fa_stem_folder = None
+            self._write_transcript(self._format_user_prompt(prompt), group="user")
+            if self.tgenie_adapter is None:
+                self._write_agent_output("Error: /fa-stem brief requires tGenie login.")
+                return
+            try:
+                brief_result = await run_fa_stem_brief(
+                    workspace=self.workspace,
+                    case_folder=case_folder,
+                    case_background=prompt,
+                    conversation=self.tgenie_adapter,
+                )
+            except FaStemBriefError as error:
+                self._write_agent_output(f"Error: {error}")
+                return
+            for status_event in brief_result.status_events:
+                status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
+                self._write_transcript(status_message)
+            report_path = brief_result.report_path.relative_to(self.workspace).as_posix()
+            self._write_agent_output(f"Atlas: FA STEM brief report written: {report_path}")
+            return
+
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
             self._write_agent_output(f"Atlas: {result.message}")
+            if result.action == "fa-stem-brief":
+                if self.tgenie_adapter is None:
+                    self._write_agent_output("Error: /fa-stem brief requires tGenie login.")
+                    return
+                try:
+                    self._pending_fa_stem_folder = self._resolve_workspace_folder(result.argument or "")
+                except ValueError as error:
+                    self._write_agent_output(f"Error: {error}")
+                    return
+                self._write_agent_output("Atlas: Paste the FA STEM case background to start analysis.")
+                return
             if result.action == "llm-wiki-ingest":
                 if self.tgenie_adapter is None:
                     self._write_agent_output("Error: /llm-wiki ingest requires tGenie login.")

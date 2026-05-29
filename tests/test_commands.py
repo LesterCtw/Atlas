@@ -15,6 +15,7 @@ class SlashCommandTests(unittest.TestCase):
         self.assertEqual(result.action, "message")
         self.assertIn("/help", result.message)
         self.assertIn("/exit", result.message)
+        self.assertIn("/fa-stem brief", result.message)
 
     def test_help_with_skill_loader_lists_skill_commands(self) -> None:
         with TemporaryDirectory() as directory:
@@ -84,6 +85,21 @@ class SlashCommandTests(unittest.TestCase):
         self.assertEqual(result.action, "llm-wiki-ingest")
         self.assertEqual(result.argument, "docs/case.pdf")
         self.assertIn("LLM Wiki ingestion", result.message)
+        self.assertIsNone(result.injected_message)
+
+    def test_fa_stem_brief_command_returns_brief_action_and_folder(self) -> None:
+        result = handle_slash_command("/fa-stem brief cases/a")
+
+        self.assertEqual(result.action, "fa-stem-brief")
+        self.assertEqual(result.argument, "cases/a")
+        self.assertIn("FA STEM brief", result.message)
+        self.assertIsNone(result.injected_message)
+
+    def test_fa_stem_brief_command_requires_folder(self) -> None:
+        result = handle_slash_command("/fa-stem brief")
+
+        self.assertEqual(result.action, "message")
+        self.assertIn("Usage: /fa-stem brief <workspace-relative-folder>", result.message)
         self.assertIsNone(result.injected_message)
 
     def test_workspace_skill_command_returns_injected_instructions(self) -> None:

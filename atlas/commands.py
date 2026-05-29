@@ -6,6 +6,12 @@ from atlas.skills import Skill, SkillLoader, SkillNotFound
 from atlas.wiki import initialize_wiki
 
 
+BUILTIN_COMMANDS_MESSAGE = (
+    "Available commands: /help for help, /exit to quit Atlas, "
+    "/fa-stem brief <workspace-relative-folder> for single-image FA STEM reports."
+)
+
+
 @dataclass(frozen=True)
 class SlashCommandResult:
     action: str
@@ -27,10 +33,27 @@ def handle_slash_command(
                 skill_commands = " Skills: " + ", ".join(f"/{name}" for name in names) + "."
         return SlashCommandResult(
             action="message",
-            message="Available commands: /help for help, /exit to quit Atlas." + skill_commands,
+            message=BUILTIN_COMMANDS_MESSAGE + skill_commands,
         )
     if command == "/exit":
         return SlashCommandResult(action="exit", message="Exiting Atlas.")
+    if command == "/fa-stem brief":
+        return SlashCommandResult(
+            action="message",
+            message="Usage: /fa-stem brief <workspace-relative-folder>",
+        )
+    if command.startswith("/fa-stem brief "):
+        argument = command.removeprefix("/fa-stem brief ").strip()
+        if not argument:
+            return SlashCommandResult(
+                action="message",
+                message="Usage: /fa-stem brief <workspace-relative-folder>",
+            )
+        return SlashCommandResult(
+            action="fa-stem-brief",
+            message=f"Starting FA STEM brief: {argument}",
+            argument=argument,
+        )
     if command.startswith("/llm-wiki ingest "):
         argument = command.removeprefix("/llm-wiki ingest ").strip()
         if not argument:

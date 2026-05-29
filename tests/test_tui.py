@@ -97,6 +97,27 @@ class PdfAttachTgenieAdapter:
         await self.attach_file(path)
 
 
+class FaStemBriefTgenieAdapter:
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.prompts: list[str] = []
+        self.attached_files: list[Path] = []
+
+    async def send_single_turn(self, user_prompt: str) -> str:
+        self.prompts.append(user_prompt)
+        return self.response
+
+    async def send_followup(self, message: str) -> str:
+        self.prompts.append(message)
+        return self.response
+
+    async def attach_file(self, path: Path) -> None:
+        self.attached_files.append(path)
+
+    async def attach_pdf(self, path: Path) -> None:
+        await self.attach_file(path)
+
+
 def rich_log_text(log: RichLog) -> str:
     return "\n".join("".join(segment.text for segment in line) for line in log.lines)
 
@@ -365,6 +386,140 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"tool": "file.attach"', adapter.messages[1])
         self.assertIn('"status": "uploaded"', adapter.messages[1])
+
+    async def test_fa_stem_brief_command_waits_for_case_background(self) -> None:
+        adapter = RecordingTgenieAdapter()
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "case-a").mkdir()
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/fa-stem brief case-a"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Atlas: Starting FA STEM brief: case-a", messages)
+                self.assertIn("Atlas: Paste the FA STEM case background to start analysis.", messages)
+
+        self.assertEqual(adapter.prompts, [])
+
+    async def test_fa_stem_brief_command_rejects_invalid_folder_before_waiting(self) -> None:
+        adapter = RecordingTgenieAdapter()
+
+        cases = {
+            "missing": ("/fa-stem brief missing", "Folder not found."),
+            "escape": ("/fa-stem brief ../outside", "Path must stay inside the workspace."),
+        }
+        for case_name, (command, expected_error) in cases.items():
+            with self.subTest(case_name=case_name):
+                with TemporaryDirectory() as directory:
+                    root = Path(directory).resolve()
+                    workspace = root / "workspace"
+                    workspace.mkdir()
+                    (root / "outside").mkdir()
+                    app = AtlasApp(
+                        workspace=workspace,
+                        tgenie_adapter=adapter,
+                    )
+
+                    async with app.run_test() as pilot:
+                        prompt = pilot.app.query_one("#prompt")
+                        prompt.value = command
+                        await prompt.action_submit()
+                        await pilot.pause()
+
+                        messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                        self.assertIn(f"Error: {expected_error}", messages)
+                        self.assertNotIn("Paste the FA STEM case background", messages)
+
+        self.assertEqual(adapter.prompts, [])
+
+    async def test_fa_stem_brief_background_creates_single_image_report(self) -> None:
+        adapter = FaStemBriefTgenieAdapter(
+            """```json
+{
+  "center_x_percent": 25,
+  "center_y_percent": 40,
+  "radius_percent": 12,
+  "reason": "Void-like contrast near the via edge.",
+  "confidence": "medium"
+}
+```"""
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            case_folder = workspace / "case-a"
+            case_folder.mkdir()
+            selected_image = case_folder / "a-first.jpg"
+            selected_image.write_bytes(b"fake jpg")
+            (case_folder / "z-later.jpeg").write_bytes(b"fake jpeg")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/fa-stem brief case-a"
+                await prompt.action_submit()
+                prompt.value = "Leakage fails at VDD after stress."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Atlas: FA STEM brief report written:", messages)
+
+            report = case_folder / "atlas-fa-stem-brief.html"
+            report_html = report.read_text(encoding="utf-8")
+
+        self.assertEqual(adapter.attached_files, [selected_image.resolve()])
+        self.assertEqual(len(adapter.prompts), 1)
+        self.assertIn("senior semiconductor process failure analysis engineer", adapter.prompts[0])
+        self.assertIn("Leakage fails at VDD after stress.", adapter.prompts[0])
+        self.assertIn("center_x_percent", adapter.prompts[0])
+        self.assertIn("a-first.jpg", report_html)
+        self.assertIn("Leakage fails at VDD after stress.", report_html)
+        self.assertIn("Void-like contrast near the via edge.", report_html)
+        self.assertIn("medium", report_html)
+        self.assertIn("left: 25.0%;", report_html)
+        self.assertIn("top: 40.0%;", report_html)
+        self.assertIn("width: 24.0%;", report_html)
+
+    async def test_fa_stem_brief_empty_folder_shows_clear_error(self) -> None:
+        adapter = FaStemBriefTgenieAdapter("{}")
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            case_folder = workspace / "case-a"
+            case_folder.mkdir()
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/fa-stem brief case-a"
+                await prompt.action_submit()
+                prompt.value = "Leakage fails at VDD after stress."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Error: No .jpg or .jpeg image found", messages)
+
+            self.assertFalse((case_folder / "atlas-fa-stem-brief.html").exists())
+
+        self.assertEqual(adapter.attached_files, [])
+        self.assertEqual(adapter.prompts, [])
 
     async def test_tui_shows_pdf_attach_failure_status(self) -> None:
         adapter = PdfAttachTgenieAdapter(

@@ -61,6 +61,15 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("confirmation-required", readme)
         self.assertIn("rejected", readme)
 
+    def test_readme_explains_fa_stem_brief_tracer(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("/fa-stem brief <workspace-relative-folder>", readme)
+        self.assertIn("atlas-fa-stem-brief.html", readme)
+        self.assertIn("case background", readme)
+        self.assertIn("AI 建議的初篩標記", readme)
+        self.assertIn("不是量測級標註", readme)
+
     def test_docs_do_not_reference_removed_development_flows(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8").lower()
         html = (ROOT / "atlas-deployment-and-usage.html").read_text(encoding="utf-8").lower()

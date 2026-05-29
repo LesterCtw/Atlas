@@ -19,7 +19,8 @@ Atlas v1 提供：
 - workspace file tools：`file.list`、`file.read`、`file.search`、`file.write`。
 - workspace attachment：`file.attach` 支援 `.pdf`、`.jpg`、`.jpeg`、`.png`；`pdf.attach` 保留給舊的 PDF-only 流程。
 - 保守的 `shell.run` 安全政策。
-- slash command：`/help`、`/exit`、`/login-done`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
+- slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
+- FA STEM 單張影像初篩 tracer 報告。
 - LLM Wiki Markdown、HTML mirror、graph HTML 輸出。
 
 ## 重要限制
@@ -162,6 +163,7 @@ TUI 操作：
 /help
 /exit
 /login-done
+/fa-stem brief <workspace-relative-folder>
 /llm-wiki
 /llm-wiki ingest <workspace-pdf-or-directory>
 /skill-creator
@@ -245,7 +247,36 @@ Output：
 
 影響與取捨：支援 PDF 與常見圖片；Word、Excel、PowerPoint 目前不支援。
 
-### 4. LLM Wiki 匯入
+### 4. FA STEM brief 單張影像初篩 tracer
+
+Input：
+
+```text
+/fa-stem brief <workspace-relative-folder>
+```
+
+接著在下一個 prompt 貼上 case background，例如電性異常、結構描述、想優先判斷的重點。
+
+Process：
+
+1. Atlas 驗證資料夾必須在 workspace 內。
+2. Atlas 等待下一個非空 prompt，並把它當作 FA STEM case background。
+3. Atlas 從資料夾中用固定排序選一張 `.jpg` 或 `.jpeg`。
+4. Atlas 將該影像 attach 給 tGenie。
+5. tGenie 依照 FA STEM prompt 回傳 fenced JSON，包含 `center_x_percent`、`center_y_percent`、`radius_percent`、`reason`、`confidence`。
+6. Atlas 解析 JSON，並在 case folder 內寫出 HTML report。
+
+Output：
+
+- `<case-folder>/atlas-fa-stem-brief.html`
+
+這個做法是什麼：這是一條最小 demo tracer，先證明「資料夾指令 → case background → 單張 STEM 影像 → AI 圈選建議 → HTML 報告」可以跑通。
+
+為什麼這樣做：先用單張影像降低風險，確認 TUI 狀態、tGenie attachment、JSON parsing 與 HTML report 都能串起來，再擴充到多圖 batching。
+
+影響與取捨：報告中的圈選是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。這個 tracer 目前不做多張影像排序、9-image Photo Bundle、profile anomaly 分類或真實 case validation。
+
+### 5. LLM Wiki 匯入
 
 Input：
 
@@ -283,7 +314,7 @@ Output：
 
 影響與取捨：每批 1 個 PDF 比較慢，但比較穩，較不容易讓 tGenie context 或附件流程失控。
 
-### 5. Skill 使用
+### 6. Skill 使用
 
 Input：
 
@@ -315,6 +346,7 @@ Workspace-local skill 位置：
 | --- | --- |
 | 一般回答 | Atlas TUI transcript |
 | 模型要求寫入的檔案 | workspace 內指定 path |
+| FA STEM brief report | `<case-folder>/atlas-fa-stem-brief.html` |
 | LLM Wiki Markdown | `wiki/index.md`、`wiki/log.md`、`wiki/pages/` |
 | LLM Wiki HTML | `wiki/output/html/index.html` |
 | LLM Wiki graph | `wiki/output/graph/index.html` |
