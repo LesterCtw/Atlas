@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from rich.text import Text
@@ -171,6 +172,11 @@ class AtlasApp(App[None]):
 
     def _write_agent_output(self, renderable: object) -> None:
         self._write_transcript(renderable, group="atlas")
+
+    def _write_status_events(self, status_events: Iterable[str]) -> None:
+        for status_event in status_events:
+            status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
+            self._write_transcript(status_message)
 
     def _format_user_prompt(self, prompt: str) -> Text:
         return Text.assemble(
@@ -367,9 +373,7 @@ class AtlasApp(App[None]):
             except FaStemBriefError as error:
                 self._write_agent_output(f"Error: {error}")
                 return
-            for status_event in brief_result.status_events:
-                status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-                self._write_transcript(status_message)
+            self._write_status_events(brief_result.status_events)
             report_path = workspace_relative_path(self.workspace, brief_result.report_path)
             self._write_agent_output(f"Atlas: FA STEM brief report written: {report_path}")
             return
@@ -401,9 +405,7 @@ class AtlasApp(App[None]):
                 except LlmWikiIngestError as error:
                     self._write_agent_output(f"Error: {error}")
                     return
-                for status_event in ingest_result.status_events:
-                    status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-                    self._write_transcript(status_message)
+                self._write_status_events(ingest_result.status_events)
                 if ingest_result.error is not None:
                     self._write_agent_output(f"Error: {ingest_result.error}")
                 if ingest_result.final_response is not None:
@@ -438,9 +440,7 @@ class AtlasApp(App[None]):
             except TgenieConversationError as error:
                 self._write_agent_output(f"Error: {error}")
                 return
-            for status_event in result.status_events:
-                status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-                self._write_transcript(status_message)
+            self._write_status_events(result.status_events)
             if result.error is not None:
                 self._write_agent_output(f"Error: {result.error.message}")
             if result.final_response is not None:
@@ -455,9 +455,7 @@ class AtlasApp(App[None]):
             adapter=self.fake_adapter,
             tools={"echo": lambda args: {"text": args.get("text", "")}},
         )
-        for status_event in result.status_events:
-            status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-            self._write_transcript(status_message)
+        self._write_status_events(result.status_events)
         if result.error is not None:
             self._write_agent_output(f"Error: {result.error.message}")
         if result.final_response is not None:
