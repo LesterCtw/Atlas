@@ -108,7 +108,7 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("rejected", readme)
         self.assertIn("needle-from-workspace", readme)
         self.assertIn("pdf.attach", readme)
-        self.assertIn("單 PDF 到 LLM Wiki ingestion 仍屬於 #12", readme)
+        self.assertIn("LLM Wiki PDF ingestion 會沿用這條 tool loop", readme)
 
     def test_readme_explains_workspace_pdf_attach_tool(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -124,6 +124,19 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("PDF upload timed out", readme)
         self.assertIn("不含敏感資料", readme)
         self.assertIn("請 tGenie 摘要", readme)
+
+    def test_readme_explains_llm_wiki_pdf_ingestion(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("/llm-wiki ingest <path>", readme)
+        self.assertIn("單一 PDF", readme)
+        self.assertIn("PDF 資料夾", readme)
+        self.assertIn("workspace 內", readme)
+        self.assertIn("wiki/output/html", readme)
+        self.assertIn("wiki/output/graph/index.html", readme)
+        self.assertIn("每批 1 個 PDF", readme)
+        self.assertIn("匯入 PDF", readme)
+        self.assertIn("可閱讀 HTML wiki", readme)
 
     def test_readme_explains_issue_5_probe_checklist(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

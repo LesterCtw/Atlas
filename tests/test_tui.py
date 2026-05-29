@@ -907,6 +907,36 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('<atlas.skill_instructions name="llm-wiki">', adapter.sent_messages[0])
         self.assertIn("LLM Wiki", adapter.sent_messages[0])
 
+    async def test_llm_wiki_ingest_command_runs_ingestion_with_real_tgenie_adapter(self) -> None:
+        adapter = PdfAttachTgenieAdapter(
+            requested_path="case.pdf",
+            followup_response="Ingested case.pdf into the wiki.",
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "case.pdf").write_bytes(b"%PDF-1.4\n")
+            app = AtlasApp(
+                workspace=workspace.resolve(),
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/llm-wiki ingest case.pdf"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Uploading PDF", messages)
+                self.assertIn("Working: Rendering HTML mirror", messages)
+                self.assertIn("Working: Rendering graph", messages)
+                self.assertIn("Atlas: Ingested case.pdf into the wiki.", messages)
+
+            self.assertEqual(adapter.attached_pdfs, [(workspace / "case.pdf").resolve()])
+            self.assertTrue((workspace / "wiki" / "output" / "html" / "index.html").is_file())
+            self.assertTrue((workspace / "wiki" / "output" / "graph" / "index.html").is_file())
+
     async def test_skill_creator_command_injects_builtin_instructions(self) -> None:
         adapter = FakeTgenieAdapter(responses=[])
 

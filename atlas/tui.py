@@ -9,6 +9,7 @@ from textual.widgets import Input, RichLog, Static
 
 from atlas.commands import handle_slash_command
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
+from atlas.llm_wiki_ingest import LlmWikiIngestError, run_llm_wiki_ingest
 from atlas.skills import SkillLoader
 from atlas.tgenie_adapter import (
     TgenieConversationAdapter,
@@ -21,6 +22,12 @@ from atlas.tool_runtime import ToolRuntime
 
 
 STATUS_MESSAGES = {
+    "validating-ingest-path": "Working: Validating ingestion path",
+    "starting-ingest-batch": "Working: Starting ingestion batch",
+    "ingest-batch-completed": "Working: Ingestion batch completed",
+    "ingest-batch-failed": "Working: Ingestion batch failed",
+    "rendering-html": "Working: Rendering HTML mirror",
+    "rendering-graph": "Working: Rendering graph",
     "waiting-for-model": "Working: Waiting for model",
     "parsing-tool-call": "Working: Parsing tool call",
     "executing-tool": "Working: Executing tool",
@@ -348,6 +355,27 @@ class AtlasApp(App[None]):
         if prompt.startswith("/"):
             result = handle_slash_command(prompt, skill_loader=SkillLoader(self.workspace))
             self._write_agent_output(f"Atlas: {result.message}")
+            if result.action == "llm-wiki-ingest":
+                if self.tgenie_adapter is None:
+                    self._write_agent_output("Error: /llm-wiki ingest requires tGenie login.")
+                    return
+                try:
+                    ingest_result = await run_llm_wiki_ingest(
+                        workspace=self.workspace,
+                        requested_path=result.argument or "",
+                        conversation=self.tgenie_adapter,
+                    )
+                except LlmWikiIngestError as error:
+                    self._write_agent_output(f"Error: {error}")
+                    return
+                for status_event in ingest_result.status_events:
+                    status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
+                    self._write_transcript(status_message)
+                if ingest_result.error is not None:
+                    self._write_agent_output(f"Error: {ingest_result.error}")
+                if ingest_result.final_response is not None:
+                    self._write_agent_output(f"Atlas: {ingest_result.final_response}")
+                return
             if result.action == "inject-skill" and result.injected_message is not None:
                 if self.fake_adapter is not None:
                     self.fake_adapter.inject(result.injected_message)

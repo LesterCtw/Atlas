@@ -75,6 +75,17 @@ class SlashCommandTests(unittest.TestCase):
         self.assertIn("Initialized LLM Wiki", result.message)
         self.assertIsNotNone(result.injected_message)
 
+    def test_llm_wiki_ingest_command_returns_ingest_action_and_path(self) -> None:
+        with TemporaryDirectory() as directory:
+            loader = SkillLoader(workspace=Path(directory))
+
+            result = handle_slash_command("/llm-wiki ingest docs/case.pdf", skill_loader=loader)
+
+        self.assertEqual(result.action, "llm-wiki-ingest")
+        self.assertEqual(result.argument, "docs/case.pdf")
+        self.assertIn("LLM Wiki ingestion", result.message)
+        self.assertIsNone(result.injected_message)
+
     def test_workspace_skill_command_returns_injected_instructions(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory)

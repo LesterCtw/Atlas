@@ -11,6 +11,7 @@ class SlashCommandResult:
     action: str
     message: str
     injected_message: str | None = None
+    argument: str | None = None
 
 
 def handle_slash_command(
@@ -30,6 +31,18 @@ def handle_slash_command(
         )
     if command == "/exit":
         return SlashCommandResult(action="exit", message="Exiting Atlas.")
+    if command.startswith("/llm-wiki ingest "):
+        argument = command.removeprefix("/llm-wiki ingest ").strip()
+        if not argument:
+            return SlashCommandResult(
+                action="message",
+                message="Usage: /llm-wiki ingest <workspace-pdf-or-directory>",
+            )
+        return SlashCommandResult(
+            action="llm-wiki-ingest",
+            message=f"Starting LLM Wiki ingestion: {argument}",
+            argument=argument,
+        )
     if skill_loader is not None and command.startswith("/"):
         skill_name = command.removeprefix("/")
         try:
