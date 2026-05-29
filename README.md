@@ -21,7 +21,7 @@ Atlas v1 提供：
 - Attachment evidence 結構化證據，用來保存附件回合中的 observation、inference、uncertainty、confidence 與 coordinates。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
-- FA STEM folder-level triage，使用 3x3 Photo Bundle 產生 candidate observations，並做 second-pass original-image review 與 final ranking。
+- FA STEM folder-level triage，使用 3x3 Photo Bundle 產生 candidate observations，做 second-pass original-image review、final ranking，並輸出 demo-ready HTML report package。
 - LLM Wiki Markdown、HTML mirror、graph HTML 輸出。
 
 ## 重要限制
@@ -297,18 +297,22 @@ Process：
 11. Atlas 用 first-pass 與 second-pass saved text evidence 做 final ranking，不假設 tGenie 還看得到前面回合的附件。
 12. final ranking 支援 0 或 1 個 primary electrical suspect，也支援多個 profile anomalies。
 13. 如果證據不足，final ranking 可以輸出 `primary suspect unclear`，同時保留 profile anomalies。
-14. Atlas 在 case folder 內寫出 HTML report。
+14. Atlas 在 case folder 內寫出 HTML report，並在 Atlas-managed artifact folder 保存 bundles、metadata、model outputs 與 report assets。
+15. HTML report 會在原圖上畫 overlay：primary electrical suspect 使用紅色圈，profile anomalies 使用黃色或橘黃色圈。
 
 Output：
 
 - `<case-folder>/atlas-fa-stem-brief.html`
-- `<case-folder>/atlas-fa-stem-bundles/photo-bundle-XXX.png`
+- `<case-folder>/atlas-fa-stem-report/bundles/photo-bundle-XXX.png`
+- `<case-folder>/atlas-fa-stem-report/metadata.json`
+- `<case-folder>/atlas-fa-stem-report/model-outputs.json`
+- `<case-folder>/atlas-fa-stem-report/assets/report.css`
 
 這個做法是什麼：這是一條 folder-level triage 流程，先把整個 STEM JPG 資料夾壓成可追蹤來源的 3x3 Photo Bundle，取得 first-pass candidate observations，再重新上傳候選原圖做 second-pass original-image review，最後用 saved text evidence 做 final ranking。
 
-為什麼這樣做：tGenie 一次只能穩定看有限附件，而且附件不應假設會跨回合保留；bundle 讓 Atlas 用較少回合掃過多張影像，second-pass 則用原圖補回細節，final ranking 只讀保存下來的文字證據。
+為什麼這樣做：tGenie 一次只能穩定看有限附件，而且附件不應假設會跨回合保留；bundle 讓 Atlas 用較少回合掃過多張影像，second-pass 則用原圖補回細節，final ranking 只讀保存下來的文字證據。Artifact folder 讓 demo 後可以檢查 bundles、metadata.json、model-outputs.json 與 report assets，同時不移動、不覆寫原始 STEM 圖。
 
-影響與取捨：first-pass candidate observations 不是 final conclusions；final ranking 也只是 full-case triage ranking，不是 final FA root cause 結論。報告中的圈選與分類是 AI 建議的初篩標記，不是量測級標註。這個流程會多花最多 10 個候選原圖 review 回合；取捨是速度較慢，但可避免用低解析 bundle 直接下結論，也能在證據不足時保留 `primary suspect unclear`。
+影響與取捨：first-pass candidate observations 不是 final conclusions；final ranking 也只是 full-case triage ranking，不是 final FA root cause 結論。報告中的紅色與黃色圈選是 AI 建議的初篩標記，不是量測級標註。這個流程會多花最多 10 個候選原圖 review 回合；取捨是速度較慢，但可避免用低解析 bundle 直接下結論，也能在證據不足時保留 `primary suspect unclear`。
 
 ### 6. LLM Wiki 匯入
 

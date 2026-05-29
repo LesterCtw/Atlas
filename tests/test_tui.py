@@ -442,7 +442,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(adapter.prompts, [])
 
-    async def test_fa_stem_brief_background_creates_first_pass_bundle_report(self) -> None:
+    async def test_fa_stem_brief_background_creates_demo_report(self) -> None:
         adapter = FaStemBriefTgenieAdapter(
             [
                 """```json
@@ -513,6 +513,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
             report = case_folder / "atlas-fa-stem-brief.html"
             report_html = report.read_text(encoding="utf-8")
+            metadata_exists = (case_folder / "atlas-fa-stem-report" / "metadata.json").exists()
+            model_outputs_exists = (case_folder / "atlas-fa-stem-report" / "model-outputs.json").exists()
 
         self.assertEqual(len(adapter.attached_files), 2)
         self.assertEqual(adapter.attached_files[0].suffix, ".png")
@@ -527,10 +529,15 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("a-first.jpg", report_html)
         self.assertIn("z-later.jpeg", report_html)
         self.assertIn("Leakage fails at VDD after stress.", report_html)
-        self.assertIn("Void-like contrast near the via edge.", report_html)
-        self.assertIn("medium", report_html)
-        self.assertIn("Final Ranking", report_html)
+        self.assertIn("FA STEM Suspect Triage Report", report_html)
+        self.assertIn("Scan Summary", report_html)
+        self.assertIn("Primary Electrical Suspect", report_html)
+        self.assertIn("overlay-circle primary-suspect", report_html)
+        self.assertIn("The confirmed void-like contrast best matches the leakage background.", report_html)
+        self.assertIn("Not-Flagged Images", report_html)
         self.assertIn("selected", report_html)
+        self.assertTrue(metadata_exists)
+        self.assertTrue(model_outputs_exists)
 
     async def test_fa_stem_brief_empty_folder_shows_clear_error(self) -> None:
         adapter = FaStemBriefTgenieAdapter("{}")

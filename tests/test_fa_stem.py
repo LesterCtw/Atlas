@@ -272,6 +272,137 @@ class FaStemBriefTests(unittest.TestCase):
 
 
 class FaStemBriefWorkflowTests(unittest.IsolatedAsyncioTestCase):
+    async def test_brief_writes_demo_report_package_with_original_image_overlays(self) -> None:
+        conversation = RecordingFaStemConversation(
+            [
+                """```json
+{
+  "candidate_observations": [
+    {
+      "tile_label": "A2",
+      "observation": "Dark void-like contrast appears near the via edge.",
+      "inference": "This may indicate missing material near the electrical path.",
+      "uncertainty": "The contrast could also come from sample preparation.",
+      "confidence": "medium",
+      "coordinates": [{"center_x_percent": 25, "center_y_percent": 40, "radius_percent": 12}]
+    },
+    {
+      "tile_label": "A3",
+      "observation": "Profile roughness appears near the upper edge.",
+      "inference": "This may be a profile anomaly rather than the electrical root cause.",
+      "uncertainty": "The roughness may be normal process variation.",
+      "confidence": "low",
+      "coordinates": [{"center_x_percent": 55, "center_y_percent": 35, "radius_percent": 8}]
+    }
+  ]
+}
+```""",
+                """```json
+{
+  "candidate_review": {
+    "observation": "The original image confirms a dark gap at the via edge.",
+    "reason": "The feature overlaps the expected current path.",
+    "uncertainty": "Local contrast may still be preparation-related.",
+    "confidence": "high",
+    "classification": "primary-suspect-relevant",
+    "coordinates": [{"center_x_percent": 28, "center_y_percent": 42, "radius_percent": 9}]
+  }
+}
+```""",
+                """```json
+{
+  "candidate_review": {
+    "observation": "The original image confirms profile roughness.",
+    "reason": "The feature is visible but does not align with the likely current path.",
+    "uncertainty": "Could be normal process variation.",
+    "confidence": "medium",
+    "classification": "profile-only",
+    "coordinates": [{"center_x_percent": 58, "center_y_percent": 36, "radius_percent": 7}]
+  }
+}
+```""",
+                """```json
+{
+  "primary_suspect": {
+    "status": "selected",
+    "source_id": "case-a/stem-01.jpg",
+    "reason": "The confirmed via-edge gap best matches the leakage background.",
+    "uncertainty": "Electrical correlation still needs human FA review.",
+    "confidence": "high",
+    "coordinates": [{"center_x_percent": 28, "center_y_percent": 42, "radius_percent": 9}]
+  },
+  "profile_anomalies": [
+    {
+      "source_id": "case-a/stem-02.jpg",
+      "reason": "Profile roughness is visible but not clearly electrical.",
+      "uncertainty": "Could be normal process variation.",
+      "confidence": "medium",
+      "coordinates": [{"center_x_percent": 58, "center_y_percent": 36, "radius_percent": 7}]
+    }
+  ]
+}
+```""",
+            ]
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            case_folder = workspace / "case-a"
+            case_folder.mkdir()
+            for index in range(3):
+                image = Image.new("RGB", (32, 24), color=(index * 50, 20, 120))
+                image.save(case_folder / f"stem-{index:02d}.jpg")
+            original_bytes = {
+                image_path.name: image_path.read_bytes()
+                for image_path in sorted(case_folder.glob("*.jpg"))
+            }
+
+            result = await run_fa_stem_brief(
+                workspace=workspace,
+                case_folder=case_folder,
+                case_background="Leakage fails at VDD after stress.",
+                conversation=conversation,
+            )
+
+            artifact_dir = case_folder / "atlas-fa-stem-report"
+            report_html = result.report_path.read_text(encoding="utf-8")
+
+            self.assertEqual(result.artifact_dir, artifact_dir)
+            self.assertTrue((artifact_dir / "bundles" / "photo-bundle-001.png").exists())
+            self.assertTrue((artifact_dir / "metadata.json").exists())
+            self.assertTrue((artifact_dir / "model-outputs.json").exists())
+            self.assertEqual(
+                original_bytes,
+                {
+                    image_path.name: image_path.read_bytes()
+                    for image_path in sorted(case_folder.glob("*.jpg"))
+                },
+            )
+
+        self.assertIn("<title>FA STEM Suspect Triage Report</title>", report_html)
+        self.assertIn("AI-suggested triage markers", report_html)
+        self.assertIn("not measurement-grade annotations", report_html)
+        self.assertIn("not final FA conclusions", report_html)
+        self.assertIn("Case Background", report_html)
+        self.assertIn("Scan Summary", report_html)
+        self.assertIn("Batch Coverage", report_html)
+        self.assertIn("Candidate Review Summary", report_html)
+        self.assertIn("Primary Electrical Suspect", report_html)
+        self.assertIn("Profile Anomalies", report_html)
+        self.assertIn("Not-Flagged Images", report_html)
+        self.assertIn("Recommended Next Actions", report_html)
+        self.assertIn('src="stem-01.jpg"', report_html)
+        self.assertIn('src="stem-02.jpg"', report_html)
+        self.assertIn("overlay-circle primary-suspect", report_html)
+        self.assertIn("overlay-circle profile-anomaly", report_html)
+        self.assertIn("left: 28.0%;", report_html)
+        self.assertIn("top: 42.0%;", report_html)
+        self.assertIn("width: 18.0%;", report_html)
+        self.assertIn("left: 58.0%;", report_html)
+        self.assertIn("top: 36.0%;", report_html)
+        self.assertIn("width: 14.0%;", report_html)
+        self.assertIn("stem-00.jpg", report_html)
+
     async def test_brief_reattaches_candidate_original_image_and_records_final_primary_suspect(self) -> None:
         conversation = RecordingFaStemConversation(
             [
@@ -434,11 +565,16 @@ class FaStemBriefWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 case_background="Leakage fails at VDD after stress.",
                 conversation=conversation,
             )
+            report_html = result.report_path.read_text(encoding="utf-8")
 
         self.assertEqual(result.final_ranking.primary_suspect.status, "unclear")
         self.assertIsNone(result.final_ranking.primary_suspect.source_id)
         self.assertEqual(len(result.final_ranking.profile_anomalies), 1)
         self.assertEqual(result.final_ranking.profile_anomalies[0].source_id, "case-a/stem-00.jpg")
+        self.assertIn("primary suspect unclear", report_html)
+        self.assertIn("Profile Anomalies", report_html)
+        self.assertIn("case-a/stem-00.jpg", report_html)
+        self.assertNotIn("overlay-circle primary-suspect", report_html)
 
     async def test_brief_attaches_photo_bundles_and_records_batch_evidence(self) -> None:
         conversation = RecordingFaStemConversation(

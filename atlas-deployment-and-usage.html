@@ -222,6 +222,7 @@ atlas C:\path\to\workspace</code></pre>
     <pre><code>/help
 /exit
 /login-done
+/fa-stem brief &lt;workspace-relative-folder&gt;
 /llm-wiki
 /llm-wiki ingest &lt;workspace-pdf-or-directory&gt;
 /skill-creator</code></pre>
@@ -258,6 +259,17 @@ atlas C:\path\to\workspace</code></pre>
       </tbody>
     </table>
 
+    <h3>FA STEM folder-level triage</h3>
+    <pre><code>/fa-stem brief &lt;workspace-relative-folder&gt;</code></pre>
+    <table>
+      <tbody>
+        <tr><th>Input</th><td>workspace 內 STEM JPG/JPEG 資料夾，接著貼上 case background。</td></tr>
+        <tr><th>Process</th><td>Atlas 產生 3x3 Photo Bundle 做 first-pass candidate observations，再重新 attach 最多 10 張候選原圖做 second-pass original-image review，最後用 saved text evidence 做 final ranking。</td></tr>
+        <tr><th>Output</th><td><code>&lt;case-folder&gt;/atlas-fa-stem-brief.html</code> 與 <code>&lt;case-folder&gt;/atlas-fa-stem-report/</code>。Report 會用紅色圈標示 primary electrical suspect，用黃色或橘黃色圈標示 profile anomalies。</td></tr>
+      </tbody>
+    </table>
+    <p><strong>限制：</strong>這些 overlay 是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。</p>
+
     <h3>LLM Wiki 匯入</h3>
     <pre><code>/llm-wiki ingest docs/example.pdf
 /llm-wiki ingest docs/pdf-folder</code></pre>
@@ -284,6 +296,7 @@ atlas C:\path\to\workspace</code></pre>
       <tbody>
         <tr><td>一般回答</td><td>Atlas TUI transcript</td></tr>
         <tr><td>模型要求寫入的檔案</td><td>workspace 內指定 path</td></tr>
+        <tr><td>FA STEM brief report</td><td><code>&lt;case-folder&gt;/atlas-fa-stem-brief.html</code>、<code>&lt;case-folder&gt;/atlas-fa-stem-report/metadata.json</code>、<code>&lt;case-folder&gt;/atlas-fa-stem-report/model-outputs.json</code></td></tr>
         <tr><td>LLM Wiki Markdown</td><td><code>wiki/index.md</code>、<code>wiki/log.md</code>、<code>wiki/pages/</code></td></tr>
         <tr><td>LLM Wiki HTML</td><td><code>wiki/output/html/index.html</code></td></tr>
         <tr><td>LLM Wiki graph</td><td><code>wiki/output/graph/index.html</code></td></tr>
