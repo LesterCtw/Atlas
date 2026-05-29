@@ -11,6 +11,7 @@ from atlas.commands import handle_slash_command
 from atlas.fa_stem import FaStemBriefError, run_fa_stem_brief
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
 from atlas.llm_wiki_ingest import LlmWikiIngestError, run_llm_wiki_ingest
+from atlas.prompt_history import PromptHistory
 from atlas.skills import SkillLoader
 from atlas.tgenie_adapter import (
     TgenieConversationAdapter,
@@ -139,9 +140,7 @@ class AtlasApp(App[None]):
         self.slash_options: list[str] = []
         self.selected_slash_index = 0
         self._transcript_group: str | None = None
-        self._prompt_history: list[str] = []
-        self._history_index: int | None = None
-        self._history_restore_changes = 0
+        self._prompt_history = PromptHistory()
 
     def compose(self) -> ComposeResult:
         yield Static(f"Atlas  |  Workspace: {self.workspace}", id="header")
@@ -277,31 +276,17 @@ class AtlasApp(App[None]):
         return self.slash_options[self.selected_slash_index]
 
     def _remember_prompt(self, prompt: str) -> None:
-        self._prompt_history.append(prompt)
-        self._history_index = None
+        self._prompt_history.remember(prompt)
 
     def _restore_prompt_history(self, direction: int) -> None:
-        if not self._prompt_history:
-            return
-
         prompt = self.query_one("#prompt", Input)
-        if self._history_index is None:
-            if direction > 0:
-                return
-            self._history_index = len(self._prompt_history) - 1
-        else:
-            next_index = self._history_index + direction
-            if next_index >= len(self._prompt_history):
-                self._history_index = None
-                self._set_prompt_value(prompt, "")
-                return
-            self._history_index = max(0, next_index)
-
-        self._set_prompt_value(prompt, self._prompt_history[self._history_index])
+        value = self._prompt_history.move(direction)
+        if value is not None:
+            self._set_prompt_value(prompt, value)
 
     def _set_prompt_value(self, prompt: Input, value: str) -> None:
         if prompt.value != value:
-            self._history_restore_changes += 1
+            self._prompt_history.record_programmatic_change()
             prompt.value = value
         prompt.cursor_position = len(value)
 
@@ -317,7 +302,7 @@ class AtlasApp(App[None]):
 
         if self.focused is prompt and event.key == "shift+enter":
             prompt.insert_text_at_cursor("\n")
-            self._history_index = None
+            self._prompt_history.reset_browse()
             event.prevent_default()
             event.stop()
             return
@@ -325,7 +310,7 @@ class AtlasApp(App[None]):
         if (
             self.focused is prompt
             and event.key in {"up", "down"}
-            and (not prompt.value.strip() or self._history_index is not None)
+            and self._prompt_history.should_restore(prompt.value)
         ):
             direction = -1 if event.key == "up" else 1
             self._restore_prompt_history(direction)
@@ -337,16 +322,13 @@ class AtlasApp(App[None]):
             return
 
         self.set_focus(prompt)
-        self._history_index = None
+        self._prompt_history.reset_browse()
         prompt.insert_text_at_cursor(event.character)
         event.prevent_default()
         event.stop()
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        if self._history_restore_changes:
-            self._history_restore_changes -= 1
-        else:
-            self._history_index = None
+        self._prompt_history.handle_input_changed()
         self._update_slash_suggestions(event.value.strip())
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
