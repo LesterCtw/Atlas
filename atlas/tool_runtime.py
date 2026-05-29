@@ -6,6 +6,13 @@ from pathlib import Path
 import shlex
 from typing import Any
 
+from atlas.workspace_paths import (
+    WorkspacePathError,
+    is_within_workspace,
+    resolve_workspace_path,
+    workspace_relative_path,
+)
+
 
 ALLOWED_ATTACHMENT_SUFFIXES = frozenset({".pdf", ".jpg", ".jpeg", ".png"})
 ALLOWED_ATTACHMENT_SUFFIXES_TEXT = ".pdf, .jpg, .jpeg, or .png"
@@ -69,18 +76,13 @@ class ToolRuntime:
             return ToolResult(ok=False, status="error", error=f"File operation failed: {error}")
 
     def _resolve_workspace_path(self, raw_path: str) -> Path:
-        path = Path(raw_path)
-        if path.is_absolute():
-            raise ToolRuntimeError("Path must stay inside the workspace.")
-        resolved = (self.workspace / path).resolve()
         try:
-            resolved.relative_to(self.workspace)
-        except ValueError as exc:
-            raise ToolRuntimeError("Path must stay inside the workspace.") from exc
-        return resolved
+            return resolve_workspace_path(self.workspace, raw_path)
+        except WorkspacePathError as exc:
+            raise ToolRuntimeError(str(exc)) from exc
 
     def _relative_path(self, path: Path) -> str:
-        return path.relative_to(self.workspace).as_posix()
+        return workspace_relative_path(self.workspace, path)
 
     def prepare_file_attachment(self, args: dict[str, Any]) -> FileAttachment:
         path = self._resolve_workspace_path(str(args["path"]))
@@ -140,9 +142,7 @@ class ToolRuntime:
         for path in sorted(root.rglob("*")):
             if not path.is_file():
                 continue
-            try:
-                path.resolve().relative_to(self.workspace)
-            except ValueError:
+            if not is_within_workspace(self.workspace, path):
                 continue
             if query in path.name:
                 matches.append(

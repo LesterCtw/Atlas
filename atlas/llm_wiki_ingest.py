@@ -7,6 +7,7 @@ from atlas.commands import format_skill_instructions
 from atlas.skills import SkillLoader
 from atlas.tgenie_tool_loop import TgenieToolConversation, run_tgenie_tool_loop
 from atlas.tool_runtime import PdfAttachment, ToolRuntime, ToolRuntimeError
+from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path
 from atlas.wiki import initialize_wiki, render_graph_html, render_html_mirror
 
 
@@ -109,14 +110,10 @@ def collect_ingest_pdfs(runtime: ToolRuntime, requested_path: str) -> list[PdfAt
 
 
 def resolve_workspace_input(runtime: ToolRuntime, requested_path: str) -> Path:
-    path = Path(requested_path)
-    if path.is_absolute():
-        raise LlmWikiIngestError("Path must stay inside the workspace.")
-    resolved = (runtime.workspace / path).resolve()
     try:
-        resolved.relative_to(runtime.workspace)
-    except ValueError as error:
-        raise LlmWikiIngestError("Path must stay inside the workspace.") from error
+        resolved = resolve_workspace_path(runtime.workspace, requested_path)
+    except WorkspacePathError as error:
+        raise LlmWikiIngestError(str(error)) from error
     if not resolved.exists():
         raise LlmWikiIngestError("PDF path not found.")
     return resolved

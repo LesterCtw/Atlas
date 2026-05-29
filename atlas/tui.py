@@ -20,6 +20,7 @@ from atlas.tgenie_adapter import (
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
 from atlas.tgenie_tool_loop import run_tgenie_tool_loop
 from atlas.tool_runtime import ToolRuntime
+from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path
 
 
 STATUS_MESSAGES = {
@@ -181,14 +182,10 @@ class AtlasApp(App[None]):
         )
 
     def _resolve_workspace_folder(self, raw_path: str) -> Path:
-        path = Path(raw_path)
-        if path.is_absolute():
-            raise ValueError("Path must stay inside the workspace.")
-        resolved = (self.workspace / path).resolve()
         try:
-            resolved.relative_to(self.workspace.resolve())
-        except ValueError as error:
-            raise ValueError("Path must stay inside the workspace.") from error
+            resolved = resolve_workspace_path(self.workspace, raw_path)
+        except WorkspacePathError as error:
+            raise ValueError(str(error)) from error
         if not resolved.exists():
             raise ValueError("Folder not found.")
         if not resolved.is_dir():
