@@ -125,6 +125,34 @@ TUI 採鍵盤優先操作。滑鼠點 transcript 不會讓 transcript 取得 foc
 
 如果 Chrome 沒有安裝，或公司政策阻擋 Playwright 開啟系統 Chrome，Atlas 會在 TUI 顯示錯誤訊息。這時請先確認公司電腦有 Google Chrome，且允許本機 Python 程式開啟 Chrome。
 
+## 真實 tGenie 單輪對話
+
+Atlas 目前已有 #5 的最小真實 tGenie conversation adapter。你在 TUI 完成 tGenie 登入並輸入 `/login-done` 後，一般 prompt 會送到已開啟的 tGenie 頁面，等待 tGenie 完成生成，再把最新回覆顯示回 Atlas transcript。
+
+**這個做法是什麼**：
+adapter 使用 async Playwright 操作既有 tGenie 網頁。它會先等待 `textarea[name="chat-input-textarea"]` 可用，預設沿用目前對話，不強制點 `New Conversation`。如果呼叫端明確要求 fresh conversation，才會在需要時點 `svg.tabler-icon-layout-sidebar` 打開 sidebar，然後點 `button:has-text("New Conversation")`。
+
+送出 prompt 時，Atlas 會把使用者任務包在 bootstrap instructions 裡一起貼進 tGenie。bootstrap 會告訴 tGenie：它正在 Atlas agent harness 裡、不能直接操作本機檔案、需要本機工具時必須輸出 `atlas.tool_call` fenced JSON，且一次只能要求一個 tool call。後續 tool 執行結果會用 `atlas.tool_result` 回貼。
+
+目前 adapter 使用的主要 selector：
+
+- textarea：`textarea[name="chat-input-textarea"]`
+- new conversation：`button:has-text("New Conversation")`
+- sidebar toggle：`svg.tabler-icon-layout-sidebar`
+- attach：`button[data-tooltip-id="attach-button-tooltip"]`
+- attach success：`page.get_by_text(file_name, exact=False)`
+- send：`button:has(svg.tabler-icon-circle-arrow-up-filled)`
+- stop generating：`img[alt="stop icon"]`
+- reply：`div.prose`
+
+除了 attach success 和 reply 之外，adapter 會取 `.first`；reply 會取 `.last`，也就是最新的 tGenie 回覆。
+
+**為什麼這樣做**：
+這些 selector 來自公司環境已驗證的 tGenie UI。預設不強制開新對話，可以避免 Atlas 意外切走你目前正在看的 tGenie conversation；bootstrap 仍會在每次 Atlas 任務送出時一起提供必要上下文。
+
+**影響與取捨**：
+#5 只負責真實單輪對話與 bootstrap prompt injection。它會等待 stop generating icon 出現再消失；如果 tGenie 回覆太快、stop icon 沒來得及出現，adapter 會改用「最新 reply 文字已變更」判斷完成。#5 不會執行 tool call，也不會把 `atlas.tool_result` 貼回 tGenie；這是 #8 的責任。
+
 執行 probe：
 
 ```bash

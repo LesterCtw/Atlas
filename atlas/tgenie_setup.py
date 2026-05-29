@@ -56,6 +56,7 @@ class TgenieBrowserLaunchError(RuntimeError):
 @dataclass
 class TgenieLoginBrowserSession:
     context: Any
+    page: Any
     playwright: Any
 
     async def close(self) -> None:
@@ -82,7 +83,7 @@ class TgenieBrowserLauncher:
             )
             page = context.pages[0] if context.pages else await context.new_page()
             await page.goto(url, wait_until="domcontentloaded")
-            return TgenieLoginBrowserSession(context=context, playwright=playwright)
+            return TgenieLoginBrowserSession(context=context, page=page, playwright=playwright)
         except Exception as error:
             if playwright is not None:
                 await playwright.stop()

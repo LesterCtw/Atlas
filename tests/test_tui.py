@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from atlas.fake_loop import FakeTgenieAdapter
+from atlas.tgenie_adapter import TgenieConversationError
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError
 from atlas.tui import AtlasApp
 from rich.cells import cell_len
@@ -25,6 +26,21 @@ class RecordingLoginBrowserLauncher:
 class FailingLoginBrowserLauncher:
     async def open_login_browser(self, url: str, profile_dir: Path) -> object:
         raise TgenieBrowserLaunchError("Could not open system Chrome. Install Google Chrome.")
+
+
+class RecordingTgenieAdapter:
+    def __init__(self, response: str = "atlas-ok") -> None:
+        self.response = response
+        self.prompts: list[str] = []
+
+    async def send_single_turn(self, user_prompt: str) -> str:
+        self.prompts.append(user_prompt)
+        return self.response
+
+
+class FailingTgenieAdapter:
+    async def send_single_turn(self, user_prompt: str) -> str:
+        raise TgenieConversationError("Could not find tGenie send button with selector: button:has(svg)")
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -188,6 +204,44 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                     suggestions = pilot.app.query_one("#slash-suggestions", Static)
                     self.assertIn("/login-done", str(suggestions.render()))
+
+    async def test_prompt_is_sent_to_real_tgenie_adapter_when_available(self) -> None:
+        adapter = RecordingTgenieAdapter(response="atlas-ok")
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Atlas smoke test."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("› You  Atlas smoke test.", messages)
+                self.assertIn("Working: Waiting for model", messages)
+                self.assertIn("Atlas: atlas-ok", messages)
+
+        self.assertEqual(adapter.prompts, ["Atlas smoke test."])
+
+    async def test_real_tgenie_adapter_errors_are_shown_in_tui(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                tgenie_adapter=FailingTgenieAdapter(),
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "send this"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Error: Could not find tGenie send button", messages)
 
     async def test_app_shows_header_messages_and_prompt_input(self) -> None:
         with TemporaryDirectory() as directory:

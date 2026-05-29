@@ -83,6 +83,19 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("/login-done", readme)
         self.assertIn("Atlas 不會要求、儲存或處理密碼", readme)
 
+    def test_readme_explains_real_tgenie_single_turn_adapter(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("真實 tGenie 單輪對話", readme)
+        self.assertIn('textarea[name="chat-input-textarea"]', readme)
+        self.assertIn('button:has(svg.tabler-icon-circle-arrow-up-filled)', readme)
+        self.assertIn('img[alt="stop icon"]', readme)
+        self.assertIn("reply 會取 `.last`", readme)
+        self.assertIn("預設沿用目前對話", readme)
+        self.assertIn("bootstrap prompt injection", readme)
+        self.assertIn("#5 只負責真實單輪對話", readme)
+        self.assertIn("#8 的責任", readme)
+
     def test_readme_explains_issue_5_probe_checklist(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

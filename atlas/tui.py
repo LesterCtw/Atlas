@@ -10,6 +10,11 @@ from textual.widgets import Input, RichLog, Static
 from atlas.commands import handle_slash_command
 from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
 from atlas.skills import SkillLoader
+from atlas.tgenie_adapter import (
+    TgenieConversationAdapter,
+    TgenieConversationClient,
+    TgenieConversationError,
+)
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
 
 
@@ -92,12 +97,14 @@ class AtlasApp(App[None]):
         self,
         workspace: Path,
         fake_adapter: FakeTgenieAdapter | None = None,
+        tgenie_adapter: TgenieConversationClient | None = None,
         tgenie_config_store: AtlasConfigStore | None = None,
         tgenie_browser_launcher: TgenieBrowserLauncher | None = None,
     ) -> None:
         super().__init__()
         self.workspace = workspace
         self.fake_adapter = fake_adapter
+        self.tgenie_adapter = tgenie_adapter
         self.tgenie_config_store = tgenie_config_store
         self.tgenie_browser_launcher = tgenie_browser_launcher
         self._tgenie_login_session: object | None = None
@@ -178,6 +185,13 @@ class AtlasApp(App[None]):
             return
         self._awaiting_tgenie_login = True
         self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done.")
+
+    def _prepare_tgenie_adapter(self) -> None:
+        if self.tgenie_adapter is not None or self._tgenie_login_session is None:
+            return
+        page = getattr(self._tgenie_login_session, "page", None)
+        if page is not None:
+            self.tgenie_adapter = TgenieConversationAdapter(page=page)
 
     def _available_slash_options(self, value: str = "/") -> list[str]:
         skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
@@ -314,7 +328,12 @@ class AtlasApp(App[None]):
 
         if self._awaiting_tgenie_login and prompt == "/login-done":
             self._awaiting_tgenie_login = False
+            self._prepare_tgenie_adapter()
             self._write_agent_output("Atlas: tGenie login confirmed. You can continue in Atlas.")
+            return
+
+        if self._awaiting_tgenie_login:
+            self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done before sending prompts.")
             return
 
         if prompt.startswith("/"):
@@ -339,6 +358,16 @@ class AtlasApp(App[None]):
             return
 
         self._write_transcript(self._format_user_prompt(prompt), group="user")
+        if self.tgenie_adapter is not None:
+            self._write_transcript("Working: Waiting for model")
+            try:
+                response = await self.tgenie_adapter.send_single_turn(prompt)
+            except TgenieConversationError as error:
+                self._write_agent_output(f"Error: {error}")
+                return
+            self._write_agent_output(f"Atlas: {response}")
+            return
+
         if self.fake_adapter is None:
             return
 
