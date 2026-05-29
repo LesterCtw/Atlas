@@ -169,6 +169,17 @@ class TgenieAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Atlas agent harness", sent_prompt)
         self.assertIn("Atlas smoke test.", sent_prompt)
 
+    async def test_adapter_sends_followup_without_bootstrap(self) -> None:
+        page = FakePage(new_conversation_visible=False, stop_visible=False)
+        adapter = TgenieConversationAdapter(page, stop_start_timeout_ms=1, poll_interval_seconds=0)
+
+        reply = await adapter.send_followup("```json\n{\"type\":\"atlas.tool_result\"}\n```")
+
+        self.assertEqual(reply, "atlas-ok")
+        sent_prompt = page.locators[TEXTAREA_SELECTOR].filled_values[0]
+        self.assertEqual(sent_prompt, "```json\n{\"type\":\"atlas.tool_result\"}\n```")
+        self.assertNotIn("Atlas agent harness", sent_prompt)
+
     async def test_adapter_can_start_new_conversation_when_requested(self) -> None:
         page = FakePage(new_conversation_visible=False, stop_visible=False)
         adapter = TgenieConversationAdapter(page, stop_start_timeout_ms=1, poll_interval_seconds=0)

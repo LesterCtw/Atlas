@@ -153,6 +153,33 @@ adapter 使用 async Playwright 操作既有 tGenie 網頁。它會先等待 `te
 **影響與取捨**：
 #5 只負責真實單輪對話與 bootstrap prompt injection。它會等待 stop generating icon 出現再消失；如果 tGenie 回覆太快、stop icon 沒來得及出現，adapter 會改用「最新 reply 文字已變更」判斷完成。#5 不會執行 tool call，也不會把 `atlas.tool_result` 貼回 tGenie；這是 #8 的責任。
 
+## 真實 tGenie Tool Loop
+
+Atlas 目前也有 #8 的最小真實 tGenie tool loop。完成 `/login-done` 後，TUI 的一般 prompt 不只會送到 tGenie，還會檢查 tGenie 回覆中是否包含 `atlas.tool_call`。如果 tGenie 要求工具，Atlas 會在目前 workspace 內執行工具，把 `atlas.tool_result` 回貼到同一個 tGenie conversation，然後繼續等 tGenie 下一輪回覆，直到 tGenie 產出不含 tool call 的 final answer。
+
+**這個做法是什麼**：
+tool loop 把三個既有部分接起來：真實 tGenie conversation adapter、文字型 `atlas.tool_call` parser、以及 workspace tool runtime。adapter 只負責把訊息送進同一個 tGenie conversation 並讀最新回覆；tool loop 負責判斷回覆是 final answer、合法 tool call，或需要 tGenie 修正的 tool-call error。
+
+目前真實 tool loop 支援的工具和 workspace tool runtime 相同：
+
+- `file.list`
+- `file.read`
+- `file.search`
+- `file.write`
+- `shell.run`
+
+`shell.run` 會保留 runtime 的安全政策。低風險命令可執行；`confirmation-required` 和 `rejected` 不會被繞過，而是以 structured `atlas.tool_result` 回貼給 tGenie，讓 tGenie 說明下一步。
+
+如果 tGenie 回傳 malformed JSON、missing `tool`、unknown tool、missing `args`、invalid `args`，或同一輪多個 tool calls，Atlas 不會執行任何工具。Atlas 會把 `atlas.tool_call_error` 回貼到同一個 conversation，要求 tGenie 下一輪只重送一個修正後的 `atlas.tool_call`。
+
+**為什麼這樣做**：
+tGenie 是網頁版 LLM，不一定有 native function calling。用文字型 fenced JSON 可以先建立穩定 protocol；把解析、工具執行、回貼結果放在 Atlas 端，則能維持 workspace 邊界和 shell safety policy。
+
+**影響與取捨**：
+#8 讓 tGenie 可以透過 Atlas 讀 workspace、搜尋檔案、寫檔，並執行受控 shell command。取捨是 shell confirmation 目前還沒有互動式確認 UI；需要確認的命令會回傳 `confirmation-required`，不會真的執行。PDF attach 仍屬於 #9，單 PDF 到 LLM Wiki ingestion 仍屬於 #12。
+
+手動 smoke test 可以在 workspace 放一個含有固定字串的文字檔，例如 `atlas-smoke.txt`，內容寫 `needle-from-workspace`。啟動 Atlas、完成 `/login-done` 後，請 tGenie 搜尋 workspace 裡哪個檔案包含 `needle-from-workspace`，並根據 tool result 回答檔名與該行文字。
+
 執行 probe：
 
 ```bash

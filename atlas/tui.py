@@ -16,13 +16,18 @@ from atlas.tgenie_adapter import (
     TgenieConversationError,
 )
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
+from atlas.tgenie_tool_loop import run_tgenie_tool_loop
+from atlas.tool_runtime import ToolRuntime
 
 
 STATUS_MESSAGES = {
     "waiting-for-model": "Working: Waiting for model",
     "parsing-tool-call": "Working: Parsing tool call",
     "executing-tool": "Working: Executing tool",
+    "sending-tool-result": "Working: Sending tool result",
     "final-response": "Working: Final response",
+    "tool-call-error": "Working: Tool call error",
+    "sending-tool-error": "Working: Sending tool error",
     "error": "Working: Tool call error",
 }
 BASE_SLASH_OPTIONS = ["/help", "/exit"]
@@ -359,13 +364,22 @@ class AtlasApp(App[None]):
 
         self._write_transcript(self._format_user_prompt(prompt), group="user")
         if self.tgenie_adapter is not None:
-            self._write_transcript("Working: Waiting for model")
             try:
-                response = await self.tgenie_adapter.send_single_turn(prompt)
+                result = await run_tgenie_tool_loop(
+                    initial_prompt=prompt,
+                    conversation=self.tgenie_adapter,
+                    tool_runtime=ToolRuntime(self.workspace),
+                )
             except TgenieConversationError as error:
                 self._write_agent_output(f"Error: {error}")
                 return
-            self._write_agent_output(f"Atlas: {response}")
+            for status_event in result.status_events:
+                status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
+                self._write_transcript(status_message)
+            if result.error is not None:
+                self._write_agent_output(f"Error: {result.error.message}")
+            if result.final_response is not None:
+                self._write_agent_output(f"Atlas: {result.final_response}")
             return
 
         if self.fake_adapter is None:

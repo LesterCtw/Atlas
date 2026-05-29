@@ -19,6 +19,9 @@ class TgenieConversationClient(Protocol):
     async def send_single_turn(self, user_prompt: str) -> str:
         pass
 
+    async def send_followup(self, message: str) -> str:
+        pass
+
 
 class TgenieConversationError(RuntimeError):
     pass
@@ -75,6 +78,9 @@ class TgenieConversationAdapter:
     async def send_single_turn(self, user_prompt: str) -> str:
         return await self.send_single_turn_with_attachments(user_prompt=user_prompt, attachments=())
 
+    async def send_followup(self, message: str) -> str:
+        return await self._send_message(message)
+
     async def send_single_turn_with_attachments(
         self,
         user_prompt: str,
@@ -93,12 +99,16 @@ class TgenieConversationAdapter:
         if attachments:
             await self._attach_files(attachments)
 
+        return await self._send_message(prompt)
+
+    async def _send_message(self, message: str) -> str:
+        textarea = self._textarea()
         reply_locator = self.page.locator(REPLY_SELECTOR)
         previous_reply_count = await self._safe_count(reply_locator)
         previous_reply_text = await self._latest_reply_text(default="")
 
         await self._wait_visible(textarea, "prompt textarea", TEXTAREA_SELECTOR)
-        await self._run_step("fill prompt textarea", textarea.fill(prompt))
+        await self._run_step("fill prompt textarea", textarea.fill(message))
 
         send_button = self._send_button()
         await self._wait_visible(send_button, "send button", SEND_SELECTOR)

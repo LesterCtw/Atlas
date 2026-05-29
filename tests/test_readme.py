@@ -96,6 +96,19 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("#5 只負責真實單輪對話", readme)
         self.assertIn("#8 的責任", readme)
 
+    def test_readme_explains_real_tgenie_tool_loop(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("真實 tGenie Tool Loop", readme)
+        self.assertIn("atlas.tool_call", readme)
+        self.assertIn("atlas.tool_result", readme)
+        self.assertIn("同一個 tGenie conversation", readme)
+        self.assertIn("atlas.tool_call_error", readme)
+        self.assertIn("confirmation-required", readme)
+        self.assertIn("rejected", readme)
+        self.assertIn("needle-from-workspace", readme)
+        self.assertIn("PDF attach 仍屬於 #9", readme)
+
     def test_readme_explains_issue_5_probe_checklist(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

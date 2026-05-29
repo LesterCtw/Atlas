@@ -37,10 +37,29 @@ class RecordingTgenieAdapter:
         self.prompts.append(user_prompt)
         return self.response
 
+    async def send_followup(self, message: str) -> str:
+        self.prompts.append(message)
+        return self.response
+
 
 class FailingTgenieAdapter:
     async def send_single_turn(self, user_prompt: str) -> str:
         raise TgenieConversationError("Could not find tGenie send button with selector: button:has(svg)")
+
+
+class ToolLoopTgenieAdapter:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    async def send_single_turn(self, user_prompt: str) -> str:
+        self.messages.append(user_prompt)
+        return """```json
+{"type": "atlas.tool_call", "tool": "file.search", "args": {"query": "needle"}}
+```"""
+
+    async def send_followup(self, message: str) -> str:
+        self.messages.append(message)
+        return "The answer is needle here."
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -226,6 +245,34 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Atlas: atlas-ok", messages)
 
         self.assertEqual(adapter.prompts, ["Atlas smoke test."])
+
+    async def test_prompt_runs_real_tgenie_tool_loop_when_adapter_requests_tool(self) -> None:
+        adapter = ToolLoopTgenieAdapter()
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "notes.md").write_text("needle here\n", encoding="utf-8")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Find needle."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Waiting for model", messages)
+                self.assertIn("Working: Parsing tool call", messages)
+                self.assertIn("Working: Executing tool", messages)
+                self.assertIn("Working: Sending tool result", messages)
+                self.assertIn("Atlas: The answer is needle here.", messages)
+
+        self.assertEqual(adapter.messages[0], "Find needle.")
+        self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"path": "notes.md"', adapter.messages[1])
 
     async def test_real_tgenie_adapter_errors_are_shown_in_tui(self) -> None:
         with TemporaryDirectory() as directory:
