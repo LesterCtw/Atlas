@@ -82,6 +82,19 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("不是 final conclusions", readme)
         self.assertIn("AI 建議的初篩標記", readme)
         self.assertIn("不是量測級標註", readme)
+        self.assertIn("docs/fa-stem-demo-validation-checklist.html", readme)
+
+    def test_fa_stem_demo_validation_checklist_exists(self) -> None:
+        checklist = (ROOT / "docs" / "fa-stem-demo-validation-checklist.html").read_text(encoding="utf-8")
+
+        self.assertIn("<title>FA STEM Demo 驗證測試清單</title>", checklist)
+        self.assertIn("Role prompt", checklist)
+        self.assertIn("JSON schema", checklist)
+        self.assertIn("primary electrical suspect", checklist)
+        self.assertIn("profile anomalies", checklist)
+        self.assertIn("Percent coordinate resize", checklist)
+        self.assertIn("Pass / Fail 判定", checklist)
+        self.assertIn("Follow-up Issue 模板", checklist)
 
     def test_readme_explains_attachment_evidence_contract(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

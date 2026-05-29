@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FA STEM Demo 驗證測試清單</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1e293b;
+      --muted: #64748b;
+      --line: #cbd5e1;
+      --panel: #f8fafc;
+      --accent: #0f766e;
+      --warn: #b45309;
+      --fail: #b91c1c;
+      --pass: #15803d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      border-top: 2px solid var(--line);
+      margin-top: 32px;
+      padding-top: 24px;
+      font-size: 1.35rem;
+    }
+
+    h3 {
+      margin-top: 24px;
+      font-size: 1rem;
+    }
+
+    p {
+      margin: 8px 0 0;
+    }
+
+    code {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel);
+      padding: 1px 5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 12px;
+    }
+
+    pre code {
+      border: 0;
+      background: transparent;
+      padding: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.95rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--panel);
+      font-weight: 650;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    .summary {
+      border-left: 4px solid var(--accent);
+      background: var(--panel);
+      padding: 12px 14px;
+      margin: 16px 0 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      background: #ffffff;
+    }
+
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .checklist li {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      align-items: start;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 7px 0;
+    }
+
+    .checklist li:last-child {
+      border-bottom: 0;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      margin-top: 4px;
+      accent-color: var(--accent);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .pass {
+      color: var(--pass);
+      font-weight: 650;
+    }
+
+    .warn {
+      color: var(--warn);
+      font-weight: 650;
+    }
+
+    .fail {
+      color: var(--fail);
+      font-weight: 650;
+    }
+
+    .field {
+      min-height: 48px;
+      border-bottom: 1px solid var(--line);
+      margin-top: 6px;
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      main {
+        width: 100%;
+        padding: 0;
+      }
+
+      h2 {
+        break-after: avoid;
+      }
+
+      .box,
+      table {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>FA STEM Demo 驗證測試清單</h1>
+    <p class="muted">適用 issue #24：Validate STEM demo prompt with real FA case。</p>
+
+    <section class="summary">
+      <p><strong>測試目標：</strong>用真實或代表性的 FA STEM case 驗證 <code>/fa-stem brief</code> demo 是否足夠可信，可以拿給目標 demo audience 看。</p>
+      <p><strong>最小完成條件：</strong>選定 case folder、提供 case background、跑完整 workflow、檢查 HTML report 與 artifact package，並把所有需要調整的 prompt、JSON schema、overlay 或 report wording 問題開成 follow-up issue 或當場修正。</p>
+      <p><strong>重要邊界：</strong>這份測試不是要證明 AI 找到 final root cause，而是驗證它是否能產出可討論、可追蹤、沒有過度宣稱的初篩報告。</p>
+    </section>
+
+    <h2>1. 測試基本資料</h2>
+    <div class="grid">
+      <div class="box">
+        <strong>測試日期</strong>
+        <div class="field"></div>
+      </div>
+      <div class="box">
+        <strong>測試者 / Reviewers</strong>
+        <div class="field"></div>
+      </div>
+      <div class="box">
+        <strong>Atlas branch / commit</strong>
+        <div class="field"></div>
+      </div>
+      <div class="box">
+        <strong>tGenie / Chrome login 狀態</strong>
+        <div class="field"></div>
+      </div>
+      <div class="box">
+        <strong>Workspace path</strong>
+        <div class="field"></div>
+      </div>
+      <div class="box">
+        <strong>Case folder workspace-relative path</strong>
+        <div class="field"></div>
+      </div>
+    </div>
+
+    <h2>2. 測試資料必備條件</h2>
+    <ul class="checklist">
+      <li><input type="checkbox"><span>Case folder 在 Atlas workspace 內，不能用 absolute path，也不能用 <code>..</code> 逃出 workspace。</span></li>
+      <li><input type="checkbox"><span>Case folder 內有真實或代表性的 STEM <code>.jpg</code> / <code>.jpeg</code> 影像。</span></li>
+      <li><input type="checkbox"><span>如果資料夾有 nested folders，確認 nested STEM images 應該被 recursive 收進 scan。</span></li>
+      <li><input type="checkbox"><span>如果資料夾有 PDF、TXT、PNG、CSV、PowerPoint 或其他非 STEM JPG/JPEG 檔案，確認這些檔案只是被忽略，不應造成 workflow 中斷。</span></li>
+      <li><input type="checkbox"><span>保留至少一張人類已知較可疑的影像，供後續判斷 AI primary suspect 是否合理。</span></li>
+      <li><input type="checkbox"><span>保留至少一張人類認為偏 profile anomaly、但不一定是 electrical root cause 的影像，用來測 primary suspect 與 profile anomalies 是否分得清楚。</span></li>
+      <li><input type="checkbox"><span>如果可能，準備一張 known-good 或 neighboring structure 圖，並在 case background 裡描述它的用途。</span></li>
+      <li><input type="checkbox"><span>確認原始 STEM image 不應被 Atlas 移動、覆寫、裁切或畫死標記。</span></li>
+    </ul>
+
+    <h2>3. Case Background 必填內容</h2>
+    <p>在 Atlas 要求貼上 case background 時，至少包含以下資訊。資訊不足時，測試結果只能算部分有效。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>要提供什麼</th>
+          <th>為什麼要測</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Electrical context</td>
+          <td>失效現象、量測條件、bias、stress、fail bin、leakage / open / short / resistance shift 等。</td>
+          <td>確認模型不是只看形貌，而是用電性背景選 primary electrical suspect。</td>
+        </tr>
+        <tr>
+          <td>Structural guidance</td>
+          <td>影像中的結構方向、layer、via/contact/gate/metal/介電層位置、正常輪廓大概長什麼樣。</td>
+          <td>確認 prompt 是否能讓模型用對 FA 語言與結構判斷。</td>
+        </tr>
+        <tr>
+          <td>Known comparison</td>
+          <td>有無 known-good、neighboring die、reference profile、或已知不重要的 profile variation。</td>
+          <td>確認 report 能區分 profile-only anomaly 和 primary suspect。</td>
+        </tr>
+        <tr>
+          <td>Demo emphasis</td>
+          <td>demo audience 最在意什麼，例如速度、可追溯性、overlay 是否好懂、或 uncertainty 是否清楚。</td>
+          <td>確認 report wording 是否符合展示情境。</td>
+        </tr>
+        <tr>
+          <td>Known sensitive limits</td>
+          <td>不能出現在報告裡的客戶名、產品名、機密代號或量測細節。</td>
+          <td>確認 demo 用資料不會意外曝光不該顯示的內容。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Case Background 草稿區</h3>
+    <pre><code>Electrical context:
+
+Structural guidance:
+
+Known-good / comparison guidance:
+
+Demo emphasis:
+
+Sensitive terms to avoid:
+</code></pre>
+
+    <h2>4. 執行步驟</h2>
+    <ol>
+      <li>啟動 Atlas：<code>uv run atlas &lt;workspace-path&gt;</code> 或 Windows 部署環境中的 <code>atlas &lt;workspace-path&gt;</code>。</li>
+      <li>確認 Chrome 開啟 tGenie，並已完成手動登入。</li>
+      <li>在 Atlas TUI 輸入 <code>/fa-stem brief &lt;workspace-relative-folder&gt;</code>。</li>
+      <li>看到 Atlas 提示 <code>Paste the FA STEM case background to start analysis.</code> 後，貼上完整 case background。</li>
+      <li>等待 workflow 依序完成 bundle upload、model response、candidate review、final ranking 與 report writing。</li>
+      <li>打開 <code>&lt;case-folder&gt;/atlas-fa-stem-brief.html</code>。</li>
+      <li>檢查 <code>&lt;case-folder&gt;/atlas-fa-stem-report/</code> 內的 bundles、metadata、model outputs 與 CSS assets。</li>
+    </ol>
+
+    <h2>5. 必須產生的輸出</h2>
+    <ul class="checklist">
+      <li><input type="checkbox"><span><code>&lt;case-folder&gt;/atlas-fa-stem-brief.html</code> 存在，且可用一般 browser 開啟。</span></li>
+      <li><input type="checkbox"><span><code>&lt;case-folder&gt;/atlas-fa-stem-report/bundles/</code> 存在，並包含每個 batch 的 <code>photo-bundle-XXX.png</code>。</span></li>
+      <li><input type="checkbox"><span><code>&lt;case-folder&gt;/atlas-fa-stem-report/metadata.json</code> 存在，且能追蹤 source images、bundle coverage、candidate review、final ranking 與 not-flagged images。</span></li>
+      <li><input type="checkbox"><span><code>&lt;case-folder&gt;/atlas-fa-stem-report/model-outputs.json</code> 存在，且保存 first-pass、candidate-review、final-ranking 的原始模型輸出。</span></li>
+      <li><input type="checkbox"><span><code>&lt;case-folder&gt;/atlas-fa-stem-report/assets/report.css</code> 存在，HTML report 的 overlay 與版面樣式正常套用。</span></li>
+      <li><input type="checkbox"><span>原始 STEM JPG/JPEG 檔案沒有被修改，report 只引用原圖並在 HTML 上畫 overlay。</span></li>
+    </ul>
+
+    <h2>6. Workflow 行為驗證</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>測試點</th>
+          <th>Pass 標準</th>
+          <th>Fail 時處理</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Folder scan</td>
+          <td>所有 workspace 內 nested <code>.jpg</code>/<code>.jpeg</code> 都被列入，非支援檔案被忽略。</td>
+          <td>開 follow-up：image collection 或 folder validation。</td>
+        </tr>
+        <tr>
+          <td>Photo Bundle</td>
+          <td>每 9 張形成 3x3 bundle，最後不足 9 張仍形成 partial bundle；tile label A1-C3 可回到原圖。</td>
+          <td>開 follow-up：bundle metadata 或 tile mapping。</td>
+        </tr>
+        <tr>
+          <td>First-pass triage</td>
+          <td>模型只提出 candidate observations，不提前宣稱 full-case root cause。</td>
+          <td>開 follow-up：first-pass prompt。</td>
+        </tr>
+        <tr>
+          <td>Saved evidence</td>
+          <td>每筆 evidence 可看出 source image、observation、inference、uncertainty、confidence，有座標時保留 percent coordinates。</td>
+          <td>開 follow-up：JSON schema 或 parser。</td>
+        </tr>
+        <tr>
+          <td>Second-pass review</td>
+          <td>候選原圖被重新 attach，review 數量不超過 10 張，reason 與 uncertainty 有使用 first-pass evidence。</td>
+          <td>開 follow-up：candidate selection 或 review prompt。</td>
+        </tr>
+        <tr>
+          <td>Final ranking</td>
+          <td>只能有 0 或 1 個 primary electrical suspect；profile anomalies 可有多個；證據不足時可輸出 <code>primary suspect unclear</code>。</td>
+          <td>開 follow-up：final-ranking prompt 或 schema validation。</td>
+        </tr>
+        <tr>
+          <td>Attachment lifecycle</td>
+          <td>final ranking 明顯只根據 saved text evidence，不假設模型仍看得到前面 attachment。</td>
+          <td>開 follow-up：harness prompt 或 workflow sequencing。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>7. HTML Report 內容驗證</h2>
+    <ul class="checklist">
+      <li><input type="checkbox"><span>Report title 顯示 <code>FA STEM Suspect Triage Report</code>。</span></li>
+      <li><input type="checkbox"><span>Case Background 完整顯示，沒有被截斷、亂碼或錯誤 escaping。</span></li>
+      <li><input type="checkbox"><span>Scan Summary 顯示 source image count、bundle count、candidate review count、primary suspect status、profile anomaly count。</span></li>
+      <li><input type="checkbox"><span>Batch Coverage 可看出每個 Photo Bundle 覆蓋哪些原始 image。</span></li>
+      <li><input type="checkbox"><span>Covered Source Images 列出所有被掃描的 STEM JPG/JPEG。</span></li>
+      <li><input type="checkbox"><span>Candidate Review Summary 能快速看出每張候選原圖的 classification、confidence、reason、uncertainty。</span></li>
+      <li><input type="checkbox"><span>Primary Electrical Suspect section 在 selected 時顯示原圖、紅色 overlay、reason、uncertainty、confidence。</span></li>
+      <li><input type="checkbox"><span>Primary Electrical Suspect section 在 unclear 時不畫假的紅圈，並清楚說明為什麼 unclear。</span></li>
+      <li><input type="checkbox"><span>Profile Anomalies section 顯示黃色或橘黃色 overlay，且 wording 不把它們說成 primary electrical suspect。</span></li>
+      <li><input type="checkbox"><span>Not-Flagged Images section 仍列出有掃描但未被 final ranking 選中的影像。</span></li>
+      <li><input type="checkbox"><span>Uncertainty section 明確提醒這是討論材料，不是 final FA conclusion。</span></li>
+      <li><input type="checkbox"><span>Recommended Next Actions 對 FA reviewer 有實際下一步，例如人工開原圖確認、比對 neighboring structure、追加 imaging。</span></li>
+    </ul>
+
+    <h2>8. Overlay 準確性驗證</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>Pass 標準</th>
+          <th>Review 記錄</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>紅色 primary suspect overlay</td>
+          <td>圈在模型 reason 指向的同一個 suspicious location；位置沒有明顯偏到無關結構。</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>黃色 profile anomaly overlay</td>
+          <td>圈在 profile-only 或 morphology concern 上，不會混淆成 primary electrical suspect。</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Percent coordinate resize</td>
+          <td>Browser 視窗放大、縮小或列印預覽時，overlay 仍貼在同一個相對位置。</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>Radius</td>
+          <td>圈選範圍足以包含 suspicious feature，但不大到失去定位意義。</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>無座標或低信心</td>
+          <td>Report 不應硬畫不可信的精準標記；reason 與 uncertainty 要能說明限制。</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>9. FA 可信度 Review</h2>
+    <p>這部分必須由懂 case 的使用者或 FA reviewer 判斷。</p>
+    <ul class="checklist">
+      <li><input type="checkbox"><span>Role prompt 讓模型使用合理的 semiconductor process failure analysis 語言。</span></li>
+      <li><input type="checkbox"><span>模型沒有把一般 profile variation 過度解讀成 electrical root cause。</span></li>
+      <li><input type="checkbox"><span>Primary suspect 的選擇與 electrical context 有關，不只是影像中最顯眼的異常。</span></li>
+      <li><input type="checkbox"><span>如果人類預期的 suspicious image 沒被選中，report 有合理 uncertainty 或 not-flagged accounting 可追蹤。</span></li>
+      <li><input type="checkbox"><span>Reason 不是空泛形容詞，而是能指出 visible evidence 與 case background 的關係。</span></li>
+      <li><input type="checkbox"><span>Confidence 與 uncertainty 彼此一致；低信心結果沒有被寫得像定論。</span></li>
+      <li><input type="checkbox"><span>Recommended next actions 是 FA 工程師真的能採取的動作，不是泛泛而談。</span></li>
+      <li><input type="checkbox"><span>Report wording 適合 demo audience：清楚、克制、可追溯，不宣稱取代人工 FA 判斷。</span></li>
+    </ul>
+
+    <h2>10. Demo 可用性 Review</h2>
+    <ul class="checklist">
+      <li><input type="checkbox"><span>從輸入 slash command 到 report 產生的流程可以在 demo 時說清楚。</span></li>
+      <li><input type="checkbox"><span>等待時間可接受；如果 case 很大，presenter 知道預期會跑多少 batch 與 candidate reviews。</span></li>
+      <li><input type="checkbox"><span>Report 第一眼能讓 audience 看懂 primary suspect、profile anomalies、coverage 與 uncertainty。</span></li>
+      <li><input type="checkbox"><span>Artifact package 讓 presenter 可以在被問到時追溯 bundle、metadata 與 raw model outputs。</span></li>
+      <li><input type="checkbox"><span>沒有出現會讓 audience 誤解為量測級 annotation、final root cause 或自動判定良率問題的 wording。</span></li>
+      <li><input type="checkbox"><span>如果 demo 失敗，presenter 能根據 error message 判斷是 login、folder、attachment、JSON response 或 report writing 問題。</span></li>
+    </ul>
+
+    <h2>11. Negative / Edge Case 測試</h2>
+    <p>至少在正式 demo 前跑一次，避免現場才遇到基本錯誤。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>案例</th>
+          <th>操作</th>
+          <th>期望結果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>未登入 tGenie</td>
+          <td>不完成 login 就輸入 <code>/fa-stem brief</code>。</td>
+          <td>Atlas 顯示需要 tGenie login，不進入半成品 workflow。</td>
+        </tr>
+        <tr>
+          <td>不存在資料夾</td>
+          <td>輸入不存在的 workspace-relative folder。</td>
+          <td>Atlas 顯示 folder not found 類錯誤。</td>
+        </tr>
+        <tr>
+          <td>workspace escape</td>
+          <td>輸入 <code>../outside</code>。</td>
+          <td>Atlas 拒絕 path escape。</td>
+        </tr>
+        <tr>
+          <td>空資料夾</td>
+          <td>選一個沒有 JPG/JPEG 的 folder。</td>
+          <td>Atlas 顯示沒有 <code>.jpg</code> / <code>.jpeg</code> image，不產生誤導 report。</td>
+        </tr>
+        <tr>
+          <td>1 到 8 張圖</td>
+          <td>選一個小 folder。</td>
+          <td>仍產生 partial Photo Bundle 與完整 report。</td>
+        </tr>
+        <tr>
+          <td>超過 9 張圖</td>
+          <td>選一個至少 10 張圖的 folder。</td>
+          <td>產生多個 Photo Bundles，candidate original-image reviews 不超過 10 張。</td>
+        </tr>
+        <tr>
+          <td>模型 JSON 不穩</td>
+          <td>若實測遇到 malformed fenced JSON 或 missing fields。</td>
+          <td>記錄 raw model output，開 follow-up 調整 prompt、schema 或 parser error handling。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>12. Pass / Fail 判定</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>結果</th>
+          <th>判定條件</th>
+          <th>後續動作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="pass">Pass</td>
+          <td>Workflow end-to-end 完成；report 可開；artifact package 完整；FA reviewer 認為 primary/profile/uncertainty/recommended actions 足夠 demo 使用。</td>
+          <td>在 #24 留下測試紀錄，列出 case folder、branch/commit、report path、review 結論，然後可關閉 #24。</td>
+        </tr>
+        <tr>
+          <td class="warn">Conditional Pass</td>
+          <td>Demo 大致可用，但有小幅 wording、prompt emphasis 或 report layout 問題，不阻擋展示。</td>
+          <td>開 follow-up issues；若不阻擋 demo，可在 #24 註明已接受風險。</td>
+        </tr>
+        <tr>
+          <td class="fail">Fail</td>
+          <td>Workflow 無法完成、artifact 缺漏、overlay 明顯錯位、primary/profile 混淆、或 report 會讓 audience 誤解為 final FA conclusion。</td>
+          <td>不要關 #24；先修 blocker，再用同一份清單重測。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>13. Follow-up Issue 模板</h2>
+    <pre><code>Title: [FA STEM demo validation] &lt;short problem&gt;
+
+Observed during:
+- Issue: #24
+- Case folder:
+- Atlas branch / commit:
+- Report path:
+- Artifact path:
+
+Problem:
+
+Expected behavior:
+
+Evidence:
+- Screenshot / section:
+- metadata.json field:
+- model-outputs.json excerpt:
+
+Scope boundary:
+- This should / should not change:
+</code></pre>
+
+    <h2>14. #24 關閉前最後確認</h2>
+    <ul class="checklist">
+      <li><input type="checkbox"><span>已選定真實或代表性的 STEM case folder。</span></li>
+      <li><input type="checkbox"><span>已提供 case background、electrical context、structural guidance、demo-specific emphasis。</span></li>
+      <li><input type="checkbox"><span>Workflow 已完整跑完並產生 case-local HTML report。</span></li>
+      <li><input type="checkbox"><span>使用者已 review primary electrical suspect、profile anomalies、coordinate overlays、reasons、uncertainty、recommended next actions。</span></li>
+      <li><input type="checkbox"><span>所有 prompt、schema、report-copy 或 overlay 問題已修正，或已開 follow-up issue 並確認不阻擋 demo。</span></li>
+      <li><input type="checkbox"><span>已在 #24 留下測試結論，包含 Pass / Conditional Pass / Fail 與主要證據。</span></li>
+    </ul>
+  </main>
+</body>
+</html>
