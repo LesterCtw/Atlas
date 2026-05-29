@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import html
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -10,10 +9,15 @@ from typing import Protocol
 from PIL import Image, ImageDraw, ImageOps
 
 from atlas.attachment_evidence import AttachmentEvidence, format_saved_attachment_evidence
+from atlas.json_fences import (
+    JsonFencePayloadError,
+    MalformedJsonFenceError,
+    MissingJsonFenceError,
+    parse_first_json_fence_object,
+)
 from atlas.workspace_paths import resolve_workspace_path, workspace_relative_path
 
 
-_JSON_FENCE_PATTERN = re.compile(r"```json\s*(.*?)```", re.DOTALL)
 _SUPPORTED_STEM_SUFFIXES = frozenset({".jpg", ".jpeg"})
 _REPORT_ARTIFACT_DIR_NAME = "atlas-fa-stem-report"
 _PHOTO_BUNDLE_DIR_NAME = "bundles"
@@ -637,16 +641,14 @@ def _parse_final_finding(
 
 
 def _parse_fenced_json_object(model_response: str) -> dict[str, object]:
-    matches = _JSON_FENCE_PATTERN.findall(model_response)
-    if not matches:
-        raise FaStemBriefError("tGenie response did not include a fenced JSON block.")
     try:
-        payload = json.loads(matches[0])
-    except json.JSONDecodeError as error:
+        return parse_first_json_fence_object(model_response)
+    except MissingJsonFenceError as error:
+        raise FaStemBriefError("tGenie response did not include a fenced JSON block.") from error
+    except MalformedJsonFenceError as error:
         raise FaStemBriefError("tGenie response included malformed JSON.") from error
-    if not isinstance(payload, dict):
-        raise FaStemBriefError("tGenie JSON response must be an object.")
-    return payload
+    except JsonFencePayloadError as error:
+        raise FaStemBriefError("tGenie JSON response must be an object.") from error
 
 
 def _candidate_coordinates(value: object) -> tuple[dict[str, object], ...]:
@@ -700,16 +702,7 @@ Do not claim this is a final FA root cause. This is only an AI-suggested triage 
 
 
 def parse_fa_stem_circle(model_response: str) -> FaStemCircle:
-    matches = _JSON_FENCE_PATTERN.findall(model_response)
-    if not matches:
-        raise FaStemBriefError("tGenie response did not include a fenced JSON block.")
-    try:
-        payload = json.loads(matches[0])
-    except json.JSONDecodeError as error:
-        raise FaStemBriefError("tGenie response included malformed JSON.") from error
-    if not isinstance(payload, dict):
-        raise FaStemBriefError("tGenie JSON response must be an object.")
-
+    payload = _parse_fenced_json_object(model_response)
     missing_fields = [
         field
         for field in (

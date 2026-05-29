@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import json
-import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
+
+from atlas.json_fences import (
+    MalformedJsonFenceError,
+    find_json_fence_contents,
+    load_json_fence_content,
+)
 
 
 TOOL_CALL_TYPE = "atlas.tool_call"
@@ -22,19 +26,16 @@ class ToolCallError:
     message: str
 
 
-_JSON_FENCE_PATTERN = re.compile(r"```json\s*(.*?)```", re.DOTALL)
-
-
 def parse_tool_call(
     model_response: str,
     available_tools: Collection[str] | None = None,
 ) -> ToolCall | ToolCallError:
     tool_payloads: list[dict[str, Any]] = []
 
-    for raw_json in _JSON_FENCE_PATTERN.findall(model_response):
+    for raw_json in find_json_fence_contents(model_response):
         try:
-            payload = json.loads(raw_json)
-        except json.JSONDecodeError:
+            payload = load_json_fence_content(raw_json)
+        except MalformedJsonFenceError:
             return ToolCallError(
                 code="malformed-json",
                 message="Tool call JSON is invalid. Send one valid JSON Atlas tool call.",

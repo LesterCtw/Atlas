@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from atlas.json_fences import format_json_fence
 from atlas.tool_protocol import ToolCall, ToolCallError, parse_tool_call
 
 
@@ -72,4 +72,4 @@ def format_tool_result(tool_call: ToolCall, result: Any) -> str:
         "tool": tool_call.tool,
         "result": result,
     }
-    return "```json\n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n```"
+    return format_json_fence(payload)

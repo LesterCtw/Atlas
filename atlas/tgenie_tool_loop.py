@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from atlas.fake_loop import format_tool_result
+from atlas.json_fences import format_json_fence
 from atlas.tool_protocol import ToolCallError, parse_tool_call
 from atlas.tool_runtime import ToolResult, ToolRuntime, ToolRuntimeError
 
@@ -91,7 +91,7 @@ def format_tool_call_error(error: ToolCallError) -> str:
         "message": error.message,
         "instruction": "Send one corrected atlas.tool_call fenced JSON block.",
     }
-    return "```json\n" + json.dumps(payload, ensure_ascii=False, indent=2) + "\n```"
+    return format_json_fence(payload)
 
 
 async def execute_file_attach(
