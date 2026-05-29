@@ -22,6 +22,9 @@ class TgenieConversationClient(Protocol):
     async def send_followup(self, message: str) -> str:
         pass
 
+    async def attach_pdf(self, path: Path) -> None:
+        pass
+
 
 class TgenieConversationError(RuntimeError):
     pass
@@ -52,6 +55,8 @@ Rules:
 - `args` must be a JSON object.
 - Request only one tool call at a time.
 - Do not claim that you have read, written, or executed local files unless Atlas returns a tool result.
+- Available tools include `file.list`, `file.read`, `file.search`, `file.write`, `shell.run`, and `pdf.attach`.
+- Use `pdf.attach` only for a workspace-local PDF path, for example `{{"path": "docs/report.pdf"}}`.
 
 Atlas will send tool output back to you as an `atlas.tool_result` fenced JSON block in a later turn. Continue from that result when it arrives.
 
@@ -80,6 +85,9 @@ class TgenieConversationAdapter:
 
     async def send_followup(self, message: str) -> str:
         return await self._send_message(message)
+
+    async def attach_pdf(self, path: Path) -> None:
+        await self._attach_files((path,))
 
     async def send_single_turn_with_attachments(
         self,

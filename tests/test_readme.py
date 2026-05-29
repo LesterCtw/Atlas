@@ -107,7 +107,23 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn("confirmation-required", readme)
         self.assertIn("rejected", readme)
         self.assertIn("needle-from-workspace", readme)
-        self.assertIn("PDF attach 仍屬於 #9", readme)
+        self.assertIn("pdf.attach", readme)
+        self.assertIn("單 PDF 到 LLM Wiki ingestion 仍屬於 #12", readme)
+
+    def test_readme_explains_workspace_pdf_attach_tool(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("workspace PDF attach", readme)
+        self.assertIn("pdf.attach", readme)
+        self.assertIn("workspace 內的 `.pdf`", readme)
+        self.assertIn("拒絕非 PDF", readme)
+        self.assertIn("拒絕 workspace 外路徑", readme)
+        self.assertIn("Uploading PDF", readme)
+        self.assertIn("PDF uploaded", readme)
+        self.assertIn("PDF upload failed", readme)
+        self.assertIn("PDF upload timed out", readme)
+        self.assertIn("不含敏感資料", readme)
+        self.assertIn("請 tGenie 摘要", readme)
 
     def test_readme_explains_issue_5_probe_checklist(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

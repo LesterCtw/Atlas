@@ -150,6 +150,8 @@ class TgenieAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"args": {}', prompt)
         self.assertIn("Request only one tool call at a time", prompt)
         self.assertIn("atlas.tool_result", prompt)
+        self.assertIn("pdf.attach", prompt)
+        self.assertIn("workspace-local PDF", prompt)
         self.assertIn("Summarize README.md", prompt)
 
     async def test_adapter_sends_prompt_in_current_conversation_by_default(self) -> None:

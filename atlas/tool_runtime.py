@@ -23,6 +23,12 @@ class ToolResult:
         }
 
 
+@dataclass(frozen=True)
+class PdfAttachment:
+    path: Path
+    relative_path: str
+
+
 class ToolRuntime:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
@@ -68,6 +74,16 @@ class ToolRuntime:
 
     def _relative_path(self, path: Path) -> str:
         return path.relative_to(self.workspace).as_posix()
+
+    def prepare_pdf_attachment(self, args: dict[str, Any]) -> PdfAttachment:
+        path = self._resolve_workspace_path(str(args["path"]))
+        if path.suffix.lower() != ".pdf":
+            raise ToolRuntimeError("PDF attach only accepts .pdf files.")
+        if not path.exists():
+            raise FileNotFoundError
+        if path.is_dir():
+            raise IsADirectoryError
+        return PdfAttachment(path=path, relative_path=self._relative_path(path))
 
     def _write_file(self, args: dict[str, Any]) -> ToolResult:
         path = self._resolve_workspace_path(str(args["path"]))

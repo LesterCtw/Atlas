@@ -62,6 +62,35 @@ class ToolLoopTgenieAdapter:
         return "The answer is needle here."
 
 
+class PdfAttachTgenieAdapter:
+    def __init__(
+        self,
+        requested_path: str = "case.pdf",
+        attach_error: Exception | None = None,
+        followup_response: str = "The PDF is attached.",
+    ) -> None:
+        self.requested_path = requested_path
+        self.attach_error = attach_error
+        self.followup_response = followup_response
+        self.messages: list[str] = []
+        self.attached_pdfs: list[Path] = []
+
+    async def send_single_turn(self, user_prompt: str) -> str:
+        self.messages.append(user_prompt)
+        return f"""```json
+{{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {{"path": "{self.requested_path}"}}}}
+```"""
+
+    async def send_followup(self, message: str) -> str:
+        self.messages.append(message)
+        return self.followup_response
+
+    async def attach_pdf(self, path: Path) -> None:
+        if self.attach_error is not None:
+            raise self.attach_error
+        self.attached_pdfs.append(path)
+
+
 def rich_log_text(log: RichLog) -> str:
     return "\n".join("".join(segment.text for segment in line) for line in log.lines)
 
@@ -273,6 +302,91 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adapter.messages[0], "Find needle.")
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"path": "notes.md"', adapter.messages[1])
+
+    async def test_tui_shows_pdf_attach_upload_status(self) -> None:
+        adapter = PdfAttachTgenieAdapter()
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "case.pdf").write_bytes(b"%PDF-1.4\n")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Attach case.pdf."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Uploading PDF", messages)
+                self.assertIn("Working: PDF uploaded", messages)
+                self.assertIn("Atlas: The PDF is attached.", messages)
+
+        self.assertEqual(adapter.attached_pdfs, [(workspace / "case.pdf").resolve()])
+        self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"status": "uploaded"', adapter.messages[1])
+
+    async def test_tui_shows_pdf_attach_failure_status(self) -> None:
+        adapter = PdfAttachTgenieAdapter(
+            requested_path="case.txt",
+            followup_response="The PDF was rejected.",
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "case.txt").write_text("not a pdf", encoding="utf-8")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Attach case.txt."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Uploading PDF", messages)
+                self.assertIn("Working: PDF upload failed", messages)
+                self.assertIn("Atlas: The PDF was rejected.", messages)
+
+        self.assertEqual(adapter.attached_pdfs, [])
+        self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"ok": false', adapter.messages[1])
+
+    async def test_tui_shows_pdf_attach_timeout_status(self) -> None:
+        adapter = PdfAttachTgenieAdapter(
+            requested_path="case.pdf",
+            attach_error=TimeoutError("Timed out waiting for attached file name."),
+            followup_response="The PDF upload timed out.",
+        )
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            (workspace / "case.pdf").write_bytes(b"%PDF-1.4\n")
+            app = AtlasApp(
+                workspace=workspace,
+                tgenie_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "Attach case.pdf."
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Working: Uploading PDF", messages)
+                self.assertIn("Working: PDF upload timed out", messages)
+                self.assertIn("Atlas: The PDF upload timed out.", messages)
+
+        self.assertEqual(adapter.attached_pdfs, [])
+        self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
+        self.assertIn('"status": "timeout"', adapter.messages[1])
 
     async def test_real_tgenie_adapter_errors_are_shown_in_tui(self) -> None:
         with TemporaryDirectory() as directory:

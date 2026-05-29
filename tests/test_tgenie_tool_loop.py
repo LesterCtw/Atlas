@@ -9,9 +9,11 @@ from atlas.tool_runtime import ToolRuntime
 
 
 class FakeAsyncTgenieConversation:
-    def __init__(self, responses: list[str]) -> None:
+    def __init__(self, responses: list[str], attach_error: Exception | None = None) -> None:
         self.responses = list(responses)
+        self.attach_error = attach_error
         self.sent_messages: list[str] = []
+        self.attached_pdfs: list[Path] = []
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.sent_messages.append(user_prompt)
@@ -20,6 +22,11 @@ class FakeAsyncTgenieConversation:
     async def send_followup(self, message: str) -> str:
         self.sent_messages.append(message)
         return self.responses.pop(0)
+
+    async def attach_pdf(self, path: Path) -> None:
+        if self.attach_error is not None:
+            raise self.attach_error
+        self.attached_pdfs.append(path)
 
 
 class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
@@ -202,6 +209,160 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
         self.assertIn('"status": "rejected"', conversation.sent_messages[1])
         self.assertIn("Shell command rejected by safety policy", conversation.sent_messages[1])
+
+    async def test_real_tool_loop_attaches_workspace_pdf_and_returns_final_response(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            pdf_path = workspace / "reports" / "case.pdf"
+            pdf_path.parent.mkdir()
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "reports/case.pdf"}}
+```""",
+                    "The PDF is attached.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach the case PDF.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "The PDF is attached.")
+        self.assertEqual(conversation.attached_pdfs, [pdf_path.resolve()])
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"status": "uploaded"', conversation.sent_messages[1])
+        self.assertIn('"path": "reports/case.pdf"', conversation.sent_messages[1])
+
+    async def test_real_tool_loop_rejects_non_pdf_attach_before_browser_upload(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            note_path = workspace / "reports" / "case.txt"
+            note_path.parent.mkdir()
+            note_path.write_text("not a pdf", encoding="utf-8")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "reports/case.txt"}}
+```""",
+                    "I need a PDF file instead.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach the case file.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "I need a PDF file instead.")
+        self.assertEqual(conversation.attached_pdfs, [])
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"ok": false', conversation.sent_messages[1])
+        self.assertIn("only accepts .pdf", conversation.sent_messages[1])
+
+    async def test_real_tool_loop_rejects_invalid_pdf_paths_before_browser_upload(self) -> None:
+        cases = {
+            "workspace-escape": ("../outside.pdf", "workspace"),
+            "missing-pdf": ("missing.pdf", "not found"),
+            "directory-pdf": ("folder.pdf", "directory"),
+        }
+
+        for case_name, (requested_path, expected_error) in cases.items():
+            with self.subTest(case_name=case_name):
+                with TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    workspace = root / "workspace"
+                    workspace.mkdir()
+                    if case_name == "workspace-escape":
+                        (root / "outside.pdf").write_bytes(b"%PDF-1.4\n")
+                    if case_name == "directory-pdf":
+                        (workspace / "folder.pdf").mkdir()
+                    conversation = FakeAsyncTgenieConversation(
+                        responses=[
+                            f"""```json
+{{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {{"path": "{requested_path}"}}}}
+```""",
+                            "The PDF path was rejected.",
+                        ]
+                    )
+
+                    result = await run_tgenie_tool_loop(
+                        initial_prompt="Attach the requested PDF.",
+                        conversation=conversation,
+                        tool_runtime=ToolRuntime(workspace),
+                    )
+
+                self.assertEqual(result.final_response, "The PDF path was rejected.")
+                self.assertEqual(conversation.attached_pdfs, [])
+                self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+                self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+                self.assertIn('"ok": false', conversation.sent_messages[1])
+                self.assertIn(expected_error, conversation.sent_messages[1])
+
+    async def test_real_tool_loop_rejects_pdf_symlink_escape_before_browser_upload(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            outside_pdf = root / "outside.pdf"
+            outside_pdf.write_bytes(b"%PDF-1.4\n")
+            (workspace / "linked.pdf").symlink_to(outside_pdf)
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "linked.pdf"}}
+```""",
+                    "That PDF path is outside the workspace.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach linked.pdf.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "That PDF path is outside the workspace.")
+        self.assertEqual(conversation.attached_pdfs, [])
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"ok": false', conversation.sent_messages[1])
+        self.assertIn("workspace", conversation.sent_messages[1])
+
+    async def test_real_tool_loop_reports_pdf_upload_failure_as_tool_result(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            pdf_path = workspace / "case.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4\n")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "case.pdf"}}
+```""",
+                    "The PDF upload failed.",
+                ],
+                attach_error=RuntimeError("Attach button disappeared."),
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Attach case.pdf.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "The PDF upload failed.")
+        self.assertEqual(conversation.attached_pdfs, [])
+        self.assertIn("pdf-upload-failed", result.status_events)
+        self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
+        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"ok": false', conversation.sent_messages[1])
+        self.assertIn("Attach button disappeared", conversation.sent_messages[1])
 
 
 if __name__ == "__main__":
