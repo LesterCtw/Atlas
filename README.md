@@ -21,7 +21,7 @@ Atlas v1 提供：
 - Attachment evidence 結構化證據，用來保存附件回合中的 observation、inference、uncertainty、confidence 與 coordinates。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
-- FA STEM folder-level first-pass triage，使用 3x3 Photo Bundle 產生 candidate observations。
+- FA STEM folder-level triage，使用 3x3 Photo Bundle 產生 candidate observations，並做 second-pass original-image review 與 final ranking。
 - LLM Wiki Markdown、HTML mirror、graph HTML 輸出。
 
 ## 重要限制
@@ -272,7 +272,7 @@ Output：
 
 影響與取捨：後續 workflow 比較容易追蹤來源、區分 observation 和 inference，也能保留 uncertainty。取捨是 evidence 是文字摘要，不等於原始附件本身；若後續步驟需要重新檢查細節，仍應由 Atlas workflow 重新提供附件或檔案內容。
 
-### 5. FA STEM brief folder-level first-pass triage
+### 5. FA STEM brief folder-level triage 與 final ranking
 
 Input：
 
@@ -291,18 +291,24 @@ Process：
 5. 每個 tile 會有 A1 到 C3 的 label，並保留 tile-to-source mapping 回原始影像 path。
 6. Atlas 將每個 Photo Bundle attach 給 tGenie。
 7. tGenie 依照 FA STEM prompt 回傳 fenced JSON `candidate_observations`，包含 `tile_label`、`observation`、`inference`、`uncertainty`、`confidence` 與 optional `coordinates`。
-8. Atlas 解析 JSON，記錄 Attachment evidence 與 covered source images，並在 case folder 內寫出 first-pass HTML report。
+8. Atlas 從 saved first-pass evidence 選出最多 10 張 candidate 原始影像。
+9. Atlas 重新 attach 每張候選原圖，執行 second-pass original-image review。
+10. second-pass review 會要求 tGenie 回傳百分比圈選座標、reason、confidence、uncertainty，並標示 `primary-suspect-relevant` 或 `profile-only`。
+11. Atlas 用 first-pass 與 second-pass saved text evidence 做 final ranking，不假設 tGenie 還看得到前面回合的附件。
+12. final ranking 支援 0 或 1 個 primary electrical suspect，也支援多個 profile anomalies。
+13. 如果證據不足，final ranking 可以輸出 `primary suspect unclear`，同時保留 profile anomalies。
+14. Atlas 在 case folder 內寫出 HTML report。
 
 Output：
 
 - `<case-folder>/atlas-fa-stem-brief.html`
 - `<case-folder>/atlas-fa-stem-bundles/photo-bundle-XXX.png`
 
-這個做法是什麼：這是一條 folder-level first-pass triage 流程，先把整個 STEM JPG 資料夾壓成可追蹤來源的 3x3 Photo Bundle，再請 tGenie 回傳 candidate observations。
+這個做法是什麼：這是一條 folder-level triage 流程，先把整個 STEM JPG 資料夾壓成可追蹤來源的 3x3 Photo Bundle，取得 first-pass candidate observations，再重新上傳候選原圖做 second-pass original-image review，最後用 saved text evidence 做 final ranking。
 
-為什麼這樣做：tGenie 一次只能穩定看有限附件；bundle 讓 Atlas 用較少回合掃過多張影像，同時用 tile-to-source mapping 保留每個觀察對應的原圖。
+為什麼這樣做：tGenie 一次只能穩定看有限附件，而且附件不應假設會跨回合保留；bundle 讓 Atlas 用較少回合掃過多張影像，second-pass 則用原圖補回細節，final ranking 只讀保存下來的文字證據。
 
-影響與取捨：輸出是 first-pass candidate observations，不是 final conclusions。報告中的觀察是 AI 建議的初篩標記，不是量測級標註，也不是 final FA root cause 結論。這個 slice 目前不做候選原圖 second-pass review、full-case final ranking、profile anomaly 分類或真實 case validation。
+影響與取捨：first-pass candidate observations 不是 final conclusions；final ranking 也只是 full-case triage ranking，不是 final FA root cause 結論。報告中的圈選與分類是 AI 建議的初篩標記，不是量測級標註。這個流程會多花最多 10 個候選原圖 review 回合；取捨是速度較慢，但可避免用低解析 bundle 直接下結論，也能在證據不足時保留 `primary suspect unclear`。
 
 ### 6. LLM Wiki 匯入
 

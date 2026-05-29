@@ -16,6 +16,7 @@ _JSON_FENCE_PATTERN = re.compile(r"```json\s*(.*?)```", re.DOTALL)
 _SUPPORTED_STEM_SUFFIXES = frozenset({".jpg", ".jpeg"})
 _PHOTO_BUNDLE_DIR_NAME = "atlas-fa-stem-bundles"
 _PHOTO_BUNDLE_TILE_SIZE = 256
+_MAX_CANDIDATE_REVIEWS = 10
 REPORT_FILE_NAME = "atlas-fa-stem-brief.html"
 
 
@@ -47,6 +48,33 @@ class FaStemCircle:
 
 
 @dataclass(frozen=True)
+class FaStemCandidateReviewResult:
+    source_id: str
+    observation: str
+    reason: str
+    uncertainty: str
+    confidence: str
+    classification: str
+    coordinates: tuple[dict[str, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class FaStemFinalFinding:
+    status: str
+    source_id: str | None
+    reason: str
+    uncertainty: str
+    confidence: str
+    coordinates: tuple[dict[str, object], ...] = ()
+
+
+@dataclass(frozen=True)
+class FaStemFinalRanking:
+    primary_suspect: FaStemFinalFinding
+    profile_anomalies: tuple[FaStemFinalFinding, ...]
+
+
+@dataclass(frozen=True)
 class FaStemBriefResult:
     report_path: Path
     selected_image: Path
@@ -54,6 +82,9 @@ class FaStemBriefResult:
     batch_results: tuple[PhotoBundleBatchResult, ...]
     covered_source_ids: tuple[str, ...]
     evidence_items: tuple[AttachmentEvidence, ...]
+    candidate_source_ids: tuple[str, ...]
+    candidate_review_results: tuple[FaStemCandidateReviewResult, ...]
+    final_ranking: FaStemFinalRanking
     status_events: list[str]
 
     @property
@@ -115,6 +146,45 @@ async def run_fa_stem_brief(
         raise FaStemBriefError(f"FA STEM brief failed while talking to tGenie: {error}") from error
 
     covered_source_ids = tuple(image.relative_to(workspace.resolve()).as_posix() for image in images)
+    source_paths_by_id = dict(zip(covered_source_ids, images, strict=True))
+    candidate_source_ids = select_candidate_source_ids(tuple(evidence_items))
+    candidate_review_results: list[FaStemCandidateReviewResult] = []
+    try:
+        for source_id in candidate_source_ids:
+            source_path = source_paths_by_id[source_id]
+            first_pass_evidence = tuple(evidence for evidence in evidence_items if evidence.source_id == source_id)
+            status_events.append("uploading-attachment")
+            await conversation.attach_file(source_path)
+            status_events.append("attachment-uploaded")
+            status_events.append("waiting-for-model")
+            model_response = await conversation.send_single_turn(
+                build_candidate_review_prompt(
+                    case_background=case_background,
+                    source_id=source_id,
+                    first_pass_evidence=first_pass_evidence,
+                )
+            )
+            status_events.append("parsing-fa-stem-response")
+            candidate_review_results.append(
+                parse_candidate_review_result(
+                    model_response,
+                    source_id=source_id,
+                )
+            )
+
+        status_events.append("waiting-for-model")
+        final_response = await conversation.send_single_turn(
+            build_final_ranking_prompt(
+                case_background=case_background,
+                first_pass_evidence=tuple(evidence_items),
+                candidate_review_results=tuple(candidate_review_results),
+            )
+        )
+        status_events.append("parsing-fa-stem-response")
+        final_ranking = parse_final_ranking(final_response)
+    except Exception as error:
+        raise FaStemBriefError(f"FA STEM brief failed while talking to tGenie: {error}") from error
+
     status_events.append("writing-fa-stem-report")
     report_path = write_photo_bundle_report(
         case_folder=case_folder,
@@ -122,6 +192,8 @@ async def run_fa_stem_brief(
         bundles=bundles,
         covered_source_ids=covered_source_ids,
         evidence_items=tuple(evidence_items),
+        candidate_review_results=tuple(candidate_review_results),
+        final_ranking=final_ranking,
     )
     return FaStemBriefResult(
         report_path=report_path,
@@ -130,6 +202,9 @@ async def run_fa_stem_brief(
         batch_results=tuple(batch_results),
         covered_source_ids=covered_source_ids,
         evidence_items=tuple(evidence_items),
+        candidate_source_ids=candidate_source_ids,
+        candidate_review_results=tuple(candidate_review_results),
+        final_ranking=final_ranking,
         status_events=status_events,
     )
 
@@ -308,6 +383,238 @@ def parse_photo_bundle_candidate_evidence(
             )
         )
     return tuple(evidence_items)
+
+
+def select_candidate_source_ids(evidence_items: tuple[AttachmentEvidence, ...]) -> tuple[str, ...]:
+    selected: list[str] = []
+    for evidence in evidence_items:
+        if evidence.source_id not in selected:
+            selected.append(evidence.source_id)
+        if len(selected) == _MAX_CANDIDATE_REVIEWS:
+            break
+    return tuple(selected)
+
+
+def build_candidate_review_prompt(
+    *,
+    case_background: str,
+    source_id: str,
+    first_pass_evidence: tuple[AttachmentEvidence, ...],
+) -> str:
+    evidence_text = format_saved_attachment_evidence(first_pass_evidence)
+    return f"""You are acting as a senior semiconductor process failure analysis engineer.
+
+Atlas has attached the original STEM source image for this turn.
+
+Candidate source image: {source_id}
+
+Case background:
+{case_background.strip()}
+
+First-pass saved text evidence for this candidate:
+{evidence_text}
+
+Review the attached original image at higher detail. Return exactly one fenced JSON block with this shape:
+
+```json
+{{
+  "candidate_review": {{
+    "observation": "short description of what is visible in the original image",
+    "reason": "why this finding matters for the case",
+    "uncertainty": "what is unclear or could be another cause",
+    "confidence": "low | medium | high",
+    "classification": "primary-suspect-relevant | profile-only",
+    "coordinates": [
+      {{"center_x_percent": 50, "center_y_percent": 50, "radius_percent": 10}}
+    ]
+  }}
+}}
+```
+
+Use percent coordinates relative to the attached original image. Separate direct observation from reasoning."""
+
+
+def parse_candidate_review_result(
+    model_response: str,
+    *,
+    source_id: str,
+) -> FaStemCandidateReviewResult:
+    payload = _parse_fenced_json_object(model_response)
+    review = payload.get("candidate_review")
+    if not isinstance(review, dict):
+        raise FaStemBriefError("tGenie JSON response is missing candidate_review.")
+
+    missing_fields = [
+        field
+        for field in (
+            "observation",
+            "reason",
+            "uncertainty",
+            "confidence",
+            "classification",
+        )
+        if not str(review.get(field) or "").strip()
+    ]
+    if missing_fields:
+        raise FaStemBriefError("candidate_review is missing: " + ", ".join(missing_fields))
+
+    classification = str(review["classification"])
+    if classification not in {"primary-suspect-relevant", "profile-only"}:
+        raise FaStemBriefError("candidate_review classification must be primary-suspect-relevant or profile-only.")
+
+    return FaStemCandidateReviewResult(
+        source_id=source_id,
+        observation=str(review["observation"]),
+        reason=str(review["reason"]),
+        uncertainty=str(review["uncertainty"]),
+        confidence=str(review["confidence"]),
+        classification=classification,
+        coordinates=_candidate_coordinates(review.get("coordinates")),
+    )
+
+
+def build_final_ranking_prompt(
+    *,
+    case_background: str,
+    first_pass_evidence: tuple[AttachmentEvidence, ...],
+    candidate_review_results: tuple[FaStemCandidateReviewResult, ...],
+) -> str:
+    first_pass_text = format_saved_attachment_evidence(first_pass_evidence)
+    candidate_review_text = format_candidate_review_evidence(candidate_review_results)
+    return f"""You are acting as a senior semiconductor process failure analysis engineer.
+
+Choose the full-case final FA STEM triage ranking from saved text evidence only.
+Do not assume prior attachments are still visible.
+
+Case background:
+{case_background.strip()}
+
+Saved first-pass bundle evidence:
+{first_pass_text}
+
+Saved second-pass original-image review evidence:
+{candidate_review_text}
+
+Return exactly one fenced JSON block with this shape:
+
+```json
+{{
+  "primary_suspect": {{
+    "status": "selected | unclear",
+    "source_id": "case-a/stem-01.jpg",
+    "reason": "why this is the primary suspect, or why primary suspect is unclear",
+    "uncertainty": "what still needs human FA review",
+    "confidence": "low | medium | high",
+    "coordinates": [
+      {{"center_x_percent": 50, "center_y_percent": 50, "radius_percent": 10}}
+    ]
+  }},
+  "profile_anomalies": [
+    {{
+      "source_id": "case-a/stem-02.jpg",
+      "reason": "why this is profile-only",
+      "uncertainty": "what remains unclear",
+      "confidence": "low | medium | high",
+      "coordinates": []
+    }}
+  ]
+}}
+```
+
+Use status "selected" for exactly one primary electrical suspect when evidence supports it.
+Use status "unclear" and source_id null when evidence is insufficient.
+Profile anomalies can include zero or more findings."""
+
+
+def format_candidate_review_evidence(candidate_review_results: tuple[FaStemCandidateReviewResult, ...]) -> str:
+    if not candidate_review_results:
+        return "Saved second-pass review evidence:\nNone."
+
+    sections = ["Saved second-pass review evidence:"]
+    for index, review in enumerate(candidate_review_results, start=1):
+        coordinates_json = (
+            json.dumps(list(review.coordinates), ensure_ascii=False, sort_keys=True)
+            if review.coordinates
+            else "none"
+        )
+        sections.append(
+            "\n".join(
+                [
+                    f"Candidate review {index}:",
+                    f"Source: {review.source_id}",
+                    f"Classification: {review.classification}",
+                    f"Observation: {review.observation}",
+                    f"Reason: {review.reason}",
+                    f"Uncertainty: {review.uncertainty}",
+                    f"Confidence: {review.confidence}",
+                    f"Coordinates: {coordinates_json}",
+                ]
+            )
+        )
+    return "\n\n".join(sections)
+
+
+def parse_final_ranking(model_response: str) -> FaStemFinalRanking:
+    payload = _parse_fenced_json_object(model_response)
+    primary_payload = payload.get("primary_suspect")
+    if not isinstance(primary_payload, dict):
+        raise FaStemBriefError("tGenie JSON response is missing primary_suspect.")
+    anomalies_payload = payload.get("profile_anomalies")
+    if not isinstance(anomalies_payload, list):
+        raise FaStemBriefError("tGenie JSON response is missing profile_anomalies.")
+
+    primary_suspect = _parse_final_finding(primary_payload, require_source=False)
+    if primary_suspect.status not in {"selected", "unclear"}:
+        raise FaStemBriefError("primary_suspect status must be selected or unclear.")
+    if primary_suspect.status == "selected" and not primary_suspect.source_id:
+        raise FaStemBriefError("selected primary_suspect requires source_id.")
+    if primary_suspect.status == "unclear" and primary_suspect.source_id:
+        raise FaStemBriefError("unclear primary_suspect must not include source_id.")
+
+    profile_anomalies = tuple(
+        _parse_final_finding(anomaly, require_source=True, default_status="profile-only")
+        for anomaly in anomalies_payload
+    )
+    return FaStemFinalRanking(
+        primary_suspect=primary_suspect,
+        profile_anomalies=profile_anomalies,
+    )
+
+
+def _parse_final_finding(
+    payload: object,
+    *,
+    require_source: bool,
+    default_status: str | None = None,
+) -> FaStemFinalFinding:
+    if not isinstance(payload, dict):
+        raise FaStemBriefError("final ranking findings must be objects.")
+    status = str(payload.get("status") or default_status or "")
+    source_value = payload.get("source_id")
+    source_id = str(source_value) if source_value is not None else None
+    missing_fields = [
+        field
+        for field in (
+            "reason",
+            "uncertainty",
+            "confidence",
+        )
+        if not str(payload.get(field) or "").strip()
+    ]
+    if not status:
+        missing_fields.append("status")
+    if require_source and not source_id:
+        missing_fields.append("source_id")
+    if missing_fields:
+        raise FaStemBriefError("final ranking finding is missing: " + ", ".join(missing_fields))
+    return FaStemFinalFinding(
+        status=status,
+        source_id=source_id,
+        reason=str(payload["reason"]),
+        uncertainty=str(payload["uncertainty"]),
+        confidence=str(payload["confidence"]),
+        coordinates=_candidate_coordinates(payload.get("coordinates")),
+    )
 
 
 def _parse_fenced_json_object(model_response: str) -> dict[str, object]:
@@ -521,6 +828,8 @@ def write_photo_bundle_report(
     bundles: tuple[PhotoBundle, ...],
     covered_source_ids: tuple[str, ...],
     evidence_items: tuple[AttachmentEvidence, ...],
+    candidate_review_results: tuple[FaStemCandidateReviewResult, ...] = (),
+    final_ranking: FaStemFinalRanking | None = None,
 ) -> Path:
     report_path = case_folder / REPORT_FILE_NAME
     bundle_items = "\n".join(
@@ -531,6 +840,26 @@ def write_photo_bundle_report(
     )
     coverage_items = "\n".join(f"      <li>{html.escape(source_id)}</li>" for source_id in covered_source_ids)
     evidence_text = format_saved_attachment_evidence(evidence_items)
+    review_text = format_candidate_review_evidence(candidate_review_results)
+    final_ranking_section = ""
+    if final_ranking is not None:
+        primary = final_ranking.primary_suspect
+        anomaly_items = "\n".join(
+            "      <li>"
+            + html.escape(f"{anomaly.source_id}: {anomaly.reason} ({anomaly.confidence})")
+            + "</li>"
+            for anomaly in final_ranking.profile_anomalies
+        )
+        final_ranking_section = f"""
+    <h2>Final Ranking</h2>
+    <p><strong>Primary suspect:</strong> {html.escape(primary.status)}</p>
+    <p><strong>Source:</strong> {html.escape(primary.source_id or "primary suspect unclear")}</p>
+    <p><strong>Reason:</strong> {html.escape(primary.reason)}</p>
+    <p><strong>Confidence:</strong> {html.escape(primary.confidence)}</p>
+    <h3>Profile Anomalies</h3>
+    <ul>
+{anomaly_items}
+    </ul>"""
     report_path.write_text(
         f"""<!doctype html>
 <html lang="zh-Hant">
@@ -576,6 +905,9 @@ def write_photo_bundle_report(
     </ul>
     <h2>Saved Attachment Evidence</h2>
     <pre>{html.escape(evidence_text)}</pre>
+    <h2>Saved Candidate Review Evidence</h2>
+    <pre>{html.escape(review_text)}</pre>
+{final_ranking_section}
   </main>
 </body>
 </html>
