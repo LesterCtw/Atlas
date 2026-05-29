@@ -4,10 +4,17 @@ from dataclasses import dataclass
 import html
 import json
 from pathlib import Path
-import re
 from typing import Any
 
 from pyvis.network import Network
+
+from atlas.wiki_markup import (
+    extract_wikilinks,
+    parse_frontmatter,
+    render_inline_markdown,
+    slug,
+    title_from_path,
+)
 
 
 @dataclass(frozen=True)
@@ -74,9 +81,6 @@ WIKI_FILES = {
     ),
 }
 
-_WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
-
-
 def initialize_wiki(workspace: Path) -> WikiInitResult:
     root = workspace / "wiki"
     created_paths: list[Path] = []
@@ -96,15 +100,6 @@ def initialize_wiki(workspace: Path) -> WikiInitResult:
     return WikiInitResult(root=root, created_paths=created_paths)
 
 
-def extract_wikilinks(markdown: str) -> list[tuple[str, str]]:
-    links: list[tuple[str, str]] = []
-    for match in _WIKILINK_PATTERN.finditer(markdown):
-        target = match.group(1).strip()
-        label = (match.group(2) or target).strip()
-        links.append((target, label))
-    return links
-
-
 def load_wiki_pages(workspace: Path) -> list[WikiPage]:
     pages_root = workspace / "wiki" / "pages"
     if not pages_root.is_dir():
@@ -113,7 +108,7 @@ def load_wiki_pages(workspace: Path) -> list[WikiPage]:
     pages: list[WikiPage] = []
     for path in sorted(pages_root.rglob("*.md")):
         metadata, body = parse_frontmatter(path.read_text(encoding="utf-8"))
-        title = str(metadata.get("title") or _title_from_path(path))
+        title = str(metadata.get("title") or title_from_path(path))
         page_type = str(metadata.get("type") or path.parent.name)
         tags = metadata.get("tags")
         pages.append(
@@ -183,17 +178,17 @@ def render_html_mirror(workspace: Path) -> WikiRenderResult:
     pages = load_wiki_pages(workspace)
     output_dir = workspace / "wiki" / "output" / "html"
     output_dir.mkdir(parents=True, exist_ok=True)
-    slug_by_title = {page.title: _slug(page.title) for page in pages}
+    slug_by_title = {page.title: slug(page.title) for page in pages}
     written_files: list[Path] = []
 
     for page in pages:
-        output_path = output_dir / f"{_slug(page.title)}.html"
+        output_path = output_dir / f"{slug(page.title)}.html"
         output_path.write_text(_render_page_html(page, slug_by_title), encoding="utf-8")
         written_files.append(output_path)
 
     index_path = output_dir / "index.html"
     links = "\n".join(
-        f'<li><a href="{_slug(page.title)}.html">{html.escape(page.title)}</a></li>' for page in pages
+        f'<li><a href="{slug(page.title)}.html">{html.escape(page.title)}</a></li>' for page in pages
     )
     index_path.write_text(
         "<!doctype html>\n"
@@ -290,7 +285,7 @@ def _render_page_html(page: WikiPage, slug_by_title: dict[str, str]) -> str:
             continue
         if not line.strip():
             continue
-        rendered_lines.append(f"<p>{_render_inline_markdown(line, slug_by_title)}</p>")
+        rendered_lines.append(f"<p>{render_inline_markdown(line, slug_by_title)}</p>")
 
     body = "\n".join(rendered_lines)
     return (
@@ -299,58 +294,3 @@ def _render_page_html(page: WikiPage, slug_by_title: dict[str, str]) -> str:
         f"<title>{html.escape(page.title)}</title></head>"
         f"<body>{body}</body></html>\n"
     )
-
-
-def _render_inline_markdown(markdown: str, slug_by_title: dict[str, str]) -> str:
-    parts: list[str] = []
-    last_end = 0
-    for match in _WIKILINK_PATTERN.finditer(markdown):
-        parts.append(html.escape(markdown[last_end : match.start()]))
-        target = match.group(1).strip()
-        label = (match.group(2) or target).strip()
-        href = f"{slug_by_title.get(target, _slug(target))}.html"
-        parts.append(f'<a href="{html.escape(href)}">{html.escape(label)}</a>')
-        last_end = match.end()
-    parts.append(html.escape(markdown[last_end:]))
-    return "".join(parts)
-
-
-def _slug(title: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
-    return slug or "page"
-
-
-def parse_frontmatter(markdown: str) -> tuple[dict[str, Any], str]:
-    if not markdown.startswith("---\n"):
-        return {}, markdown
-
-    end_marker = markdown.find("\n---\n", 4)
-    if end_marker == -1:
-        return {}, markdown
-
-    raw_frontmatter = markdown[4:end_marker]
-    body = markdown[end_marker + len("\n---\n") :]
-    metadata: dict[str, Any] = {}
-    for raw_line in raw_frontmatter.splitlines():
-        if ":" not in raw_line:
-            continue
-        key, raw_value = raw_line.split(":", 1)
-        metadata[key.strip()] = _parse_frontmatter_value(raw_value.strip())
-    return metadata, body
-
-
-def _parse_frontmatter_value(value: str) -> Any:
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        items = value[1:-1].strip()
-        if not items:
-            return []
-        return [item.strip().strip('"').strip("'") for item in items.split(",")]
-    return value.strip('"').strip("'")
-
-
-def _title_from_path(path: Path) -> str:
-    return path.stem.replace("-", " ").title()
