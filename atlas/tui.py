@@ -13,6 +13,7 @@ from atlas.fake_loop import FakeTgenieAdapter, run_fake_tool_loop
 from atlas.llm_wiki_ingest import LlmWikiIngestError, run_llm_wiki_ingest
 from atlas.prompt_history import PromptHistory
 from atlas.skills import SkillLoader
+from atlas.slash_suggestions import SlashSuggestionState
 from atlas.tgenie_adapter import (
     TgenieConversationAdapter,
     TgenieConversationClient,
@@ -137,8 +138,7 @@ class AtlasApp(App[None]):
         self._awaiting_tgenie_url = False
         self._awaiting_tgenie_login = False
         self._pending_fa_stem_folder: Path | None = None
-        self.slash_options: list[str] = []
-        self.selected_slash_index = 0
+        self._slash_suggestions = SlashSuggestionState()
         self._transcript_group: str | None = None
         self._prompt_history = PromptHistory()
 
@@ -241,17 +241,17 @@ class AtlasApp(App[None]):
 
     def _render_slash_suggestions(self) -> None:
         suggestions = self.query_one("#slash-suggestions", Static)
-        if not self.slash_options:
+        if not self._slash_suggestions.has_options:
             suggestions.add_class("hidden")
             suggestions.update("")
             return
 
         suggestions.remove_class("hidden")
         lines = Text()
-        for index, option in enumerate(self.slash_options):
+        for index, option in enumerate(self._slash_suggestions.options):
             if index:
                 lines.append("\n")
-            if index == self.selected_slash_index:
+            if index == self._slash_suggestions.selected_index:
                 lines.append("› ", style="bold #0099ff on #1c1c1c")
                 lines.append(option, style="bold #ffffff on #1c1c1c")
             else:
@@ -261,19 +261,15 @@ class AtlasApp(App[None]):
 
     def _update_slash_suggestions(self, value: str) -> None:
         if not value.startswith("/"):
-            self.slash_options = []
-            self.selected_slash_index = 0
+            self._slash_suggestions.clear()
             self._render_slash_suggestions()
             return
 
-        self.slash_options = self._available_slash_options(value)
-        self.selected_slash_index = min(self.selected_slash_index, len(self.slash_options) - 1)
+        self._slash_suggestions.update(self._available_slash_options(value))
         self._render_slash_suggestions()
 
     def _selected_slash_option(self) -> str | None:
-        if not self.slash_options:
-            return None
-        return self.slash_options[self.selected_slash_index]
+        return self._slash_suggestions.selected()
 
     def _remember_prompt(self, prompt: str) -> None:
         self._prompt_history.remember(prompt)
@@ -292,9 +288,9 @@ class AtlasApp(App[None]):
 
     def on_key(self, event: events.Key) -> None:
         prompt = self.query_one("#prompt", Input)
-        if self.focused is prompt and self.slash_options and event.key in {"up", "down"}:
+        if self.focused is prompt and self._slash_suggestions.has_options and event.key in {"up", "down"}:
             direction = -1 if event.key == "up" else 1
-            self.selected_slash_index = (self.selected_slash_index + direction) % len(self.slash_options)
+            self._slash_suggestions.move_selection(direction)
             self._render_slash_suggestions()
             event.prevent_default()
             event.stop()
@@ -336,8 +332,7 @@ class AtlasApp(App[None]):
         selected_command = self._selected_slash_option()
         if prompt.startswith("/") and selected_command is not None:
             prompt = selected_command
-        self.slash_options = []
-        self.selected_slash_index = 0
+        self._slash_suggestions.clear()
         self._render_slash_suggestions()
         event.input.clear()
         if not prompt:
