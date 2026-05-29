@@ -20,7 +20,7 @@ from atlas.tgenie_adapter import (
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
 from atlas.tgenie_tool_loop import run_tgenie_tool_loop
 from atlas.tool_runtime import ToolRuntime
-from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path
+from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path, workspace_relative_path
 
 
 STATUS_MESSAGES = {
@@ -393,7 +393,7 @@ class AtlasApp(App[None]):
             for status_event in brief_result.status_events:
                 status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
                 self._write_transcript(status_message)
-            report_path = brief_result.report_path.relative_to(self.workspace).as_posix()
+            report_path = workspace_relative_path(self.workspace, brief_result.report_path)
             self._write_agent_output(f"Atlas: FA STEM brief report written: {report_path}")
             return
 

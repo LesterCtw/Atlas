@@ -10,6 +10,7 @@ from typing import Protocol
 from PIL import Image, ImageDraw, ImageOps
 
 from atlas.attachment_evidence import AttachmentEvidence, format_saved_attachment_evidence
+from atlas.workspace_paths import resolve_workspace_path, workspace_relative_path
 
 
 _JSON_FENCE_PATTERN = re.compile(r"```json\s*(.*?)```", re.DOTALL)
@@ -150,7 +151,7 @@ async def run_fa_stem_brief(
     except Exception as error:
         raise FaStemBriefError(f"FA STEM brief failed while talking to tGenie: {error}") from error
 
-    covered_source_ids = tuple(image.relative_to(workspace.resolve()).as_posix() for image in images)
+    covered_source_ids = tuple(workspace_relative_path(workspace, image) for image in images)
     source_paths_by_id = dict(zip(covered_source_ids, images, strict=True))
     candidate_source_ids = select_candidate_source_ids(tuple(evidence_items))
     candidate_review_results: list[FaStemCandidateReviewResult] = []
@@ -280,7 +281,7 @@ def create_photo_bundles(
         tiles = tuple(
             PhotoBundleTile(
                 label=_tile_label(index),
-                source_id=image.relative_to(workspace.resolve()).as_posix(),
+                source_id=workspace_relative_path(workspace, image),
                 source_path=image,
             )
             for index, image in enumerate(batch)
@@ -665,8 +666,8 @@ def build_single_image_prompt(
     image_path: Path,
     case_background: str,
 ) -> str:
-    image_reference = image_path.relative_to(workspace.resolve()).as_posix()
-    folder_reference = case_folder.relative_to(workspace.resolve()).as_posix()
+    image_reference = workspace_relative_path(workspace, image_path)
+    folder_reference = workspace_relative_path(workspace, case_folder)
     return f"""You are acting as a senior semiconductor process failure analysis engineer.
 
 Atlas has attached one STEM image for this turn.
@@ -1225,11 +1226,11 @@ def _render_finding_card(
 
 
 def _source_image_reference(*, workspace: Path, case_folder: Path, source_id: str) -> str:
-    source_path = (workspace.resolve() / source_id).resolve()
+    source_path = resolve_workspace_path(workspace, source_id)
     try:
         return source_path.relative_to(case_folder.resolve()).as_posix()
     except ValueError:
-        return source_path.relative_to(workspace.resolve()).as_posix()
+        return workspace_relative_path(workspace, source_path)
 
 
 def _render_overlay_marker(coordinates: tuple[dict[str, object], ...], circle_class: str) -> str:

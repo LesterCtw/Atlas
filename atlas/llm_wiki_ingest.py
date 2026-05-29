@@ -7,7 +7,7 @@ from atlas.commands import format_skill_instructions
 from atlas.skills import SkillLoader
 from atlas.tgenie_tool_loop import TgenieToolConversation, run_tgenie_tool_loop
 from atlas.tool_runtime import PdfAttachment, ToolRuntime, ToolRuntimeError
-from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path
+from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path, workspace_relative_path
 from atlas.wiki import initialize_wiki, render_graph_html, render_html_mirror
 
 
@@ -99,7 +99,7 @@ def collect_ingest_pdfs(runtime: ToolRuntime, requested_path: str) -> list[PdfAt
     candidate = resolve_workspace_input(runtime, requested_path)
     if candidate.is_dir():
         attachments = [
-            runtime.prepare_pdf_attachment({"path": path.relative_to(runtime.workspace).as_posix()})
+            runtime.prepare_pdf_attachment({"path": workspace_relative_path(runtime.workspace, path)})
             for path in sorted(candidate.iterdir(), key=lambda item: item.name)
             if path.is_file() and path.suffix.lower() == ".pdf"
         ]
