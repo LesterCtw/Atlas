@@ -799,6 +799,54 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertLessEqual(messages.region.y + messages.region.height, prompt.region.y)
                 self.assertLessEqual(prompt.cursor_screen_offset.y, prompt.content_region.y + prompt.content_region.height - 1)
 
+    async def test_left_and_right_arrows_move_prompt_cursor(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(40, 12)) as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                await pilot.press("a", "b", "c", "left", "x", "right", "y")
+                await pilot.pause()
+
+                self.assertEqual(prompt.value, "abxcy")
+                self.assertEqual(prompt.cursor_position, len(prompt.value))
+
+    async def test_up_and_down_arrows_move_multiline_prompt_cursor(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(40, 12)) as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "abc\ndef"
+                prompt.cursor_position = len(prompt.value)
+                await pilot.pause()
+
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertEqual(prompt.cursor_position, 3)
+
+                await pilot.press("down")
+                await pilot.pause()
+                self.assertEqual(prompt.cursor_position, len(prompt.value))
+
+    async def test_up_and_down_arrows_move_wrapped_prompt_cursor(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(18, 12)) as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "abcdefghijklmnopqrst"
+                prompt.cursor_position = len(prompt.value)
+                await pilot.pause()
+
+                await pilot.press("up")
+                await pilot.pause()
+                self.assertLess(prompt.cursor_position, len(prompt.value))
+
+                await pilot.press("down")
+                await pilot.pause()
+                self.assertEqual(prompt.cursor_position, len(prompt.value))
+
     async def test_resize_keeps_multiline_prompt_inside_terminal(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())

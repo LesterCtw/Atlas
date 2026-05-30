@@ -132,34 +132,62 @@ class PromptInput(Input):
         return max(1, self.scrollable_content_region.width or self.content_region.width or self.size.width)
 
     def _wrapped_prompt_lines(self, width: int, value: str | None = None) -> list[str]:
-        prompt_value = self.value if value is None else value
-        if not prompt_value:
-            return [""]
-
-        lines: list[str] = []
-        for raw_line in prompt_value.split("\n"):
-            if not raw_line:
-                lines.append("")
-                continue
-
-            current = ""
-            current_width = 0
-            for character in raw_line:
-                character_width = cell_len(character)
-                if current and current_width + character_width > width:
-                    lines.append(current)
-                    current = character
-                    current_width = character_width
-                else:
-                    current += character
-                    current_width += character_width
-            lines.append(current)
-        return lines
+        return [line for line, _start_index in self._wrapped_prompt_line_segments(width, value)]
 
     def _cursor_line_and_column(self, width: int) -> tuple[int, int]:
         cursor_prefix = self.value[: self.cursor_position]
         cursor_lines = self._wrapped_prompt_lines(width, cursor_prefix)
         return len(cursor_lines) - 1, cell_len(cursor_lines[-1])
+
+    def move_cursor_vertically(self, direction: int) -> bool:
+        width = self._prompt_content_width()
+        segments = self._wrapped_prompt_line_segments(width)
+        if len(segments) <= 1:
+            return False
+
+        cursor_line, cursor_column = self._cursor_line_and_column(width)
+        target_line = cursor_line + direction
+        if target_line < 0 or target_line >= len(segments):
+            return False
+
+        target_text, target_start = segments[target_line]
+        target_offset = self._character_index_for_cell_offset(target_text, cursor_column)
+        self.cursor_position = min(len(self.value), target_start + target_offset)
+        return True
+
+    def _wrapped_prompt_line_segments(
+        self,
+        width: int,
+        value: str | None = None,
+    ) -> list[tuple[str, int]]:
+        prompt_value = self.value if value is None else value
+        if not prompt_value:
+            return [("", 0)]
+
+        lines: list[tuple[str, int]] = []
+        current = ""
+        current_width = 0
+        current_start = 0
+        for index, character in enumerate(prompt_value):
+            if character == "\n":
+                lines.append((current, current_start))
+                current = ""
+                current_width = 0
+                current_start = index + 1
+                continue
+
+            character_width = cell_len(character)
+            if current and current_width + character_width > width:
+                lines.append((current, current_start))
+                current = character
+                current_width = character_width
+                current_start = index
+            else:
+                current += character
+                current_width += character_width
+
+        lines.append((current, current_start))
+        return lines
 
     def _visible_prompt_start(self, width: int, cursor_line: int) -> int:
         line_count = len(self._wrapped_prompt_lines(width))
@@ -489,6 +517,16 @@ class AtlasApp(App[None]):
                 event.prevent_default()
                 event.stop()
                 return
+
+        if (
+            self.focused is prompt
+            and event.key in {"up", "down"}
+            and isinstance(prompt, PromptInput)
+            and prompt.move_cursor_vertically(-1 if event.key == "up" else 1)
+        ):
+            event.prevent_default()
+            event.stop()
+            return
 
         if self.focused is prompt and event.key == "shift+enter":
             prompt.insert_text_at_cursor("\n")
