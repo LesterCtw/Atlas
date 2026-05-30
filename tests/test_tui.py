@@ -102,11 +102,11 @@ class ToolLoopTgenieAdapter:
         return "The answer is needle here."
 
 
-class PdfAttachTgenieAdapter:
+class AttachmentTgenieAdapter:
     def __init__(
         self,
         requested_path: str = "case.pdf",
-        tool_name: str = "pdf.attach",
+        tool_name: str = "file.attach",
         attach_error: Exception | None = None,
         followup_response: str = "The PDF is attached.",
     ) -> None:
@@ -116,7 +116,6 @@ class PdfAttachTgenieAdapter:
         self.followup_response = followup_response
         self.messages: list[str] = []
         self.attached_files: list[Path] = []
-        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.messages.append(user_prompt)
@@ -132,9 +131,6 @@ class PdfAttachTgenieAdapter:
         if self.attach_error is not None:
             raise self.attach_error
         self.attached_files.append(path)
-
-    async def attach_pdf(self, path: Path) -> None:
-        await self.attach_file(path)
 
 
 class FaStemBriefTgenieAdapter:
@@ -153,9 +149,6 @@ class FaStemBriefTgenieAdapter:
 
     async def attach_file(self, path: Path) -> None:
         self.attached_files.append(path)
-
-    async def attach_pdf(self, path: Path) -> None:
-        await self.attach_file(path)
 
 
 def rich_log_text(log: RichLog) -> str:
@@ -398,8 +391,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"path": "notes.md"', adapter.messages[1])
 
-    async def test_tui_shows_pdf_attach_upload_status(self) -> None:
-        adapter = PdfAttachTgenieAdapter()
+    async def test_tui_shows_pdf_file_attachment_upload_status(self) -> None:
+        adapter = AttachmentTgenieAdapter()
 
         with TemporaryDirectory() as directory:
             workspace = Path(directory).resolve()
@@ -416,16 +409,16 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Working: Uploading PDF", messages)
-                self.assertIn("Working: PDF uploaded", messages)
+                self.assertIn("Working: Uploading attachment", messages)
+                self.assertIn("Working: Attachment uploaded", messages)
                 self.assertIn("Atlas: The PDF is attached.", messages)
 
-        self.assertEqual(adapter.attached_pdfs, [(workspace / "case.pdf").resolve()])
+        self.assertEqual(adapter.attached_files, [(workspace / "case.pdf").resolve()])
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"status": "uploaded"', adapter.messages[1])
 
     async def test_tui_shows_image_attach_upload_status(self) -> None:
-        adapter = PdfAttachTgenieAdapter(
+        adapter = AttachmentTgenieAdapter(
             requested_path="panel.png",
             tool_name="file.attach",
             followup_response="The image is attached.",
@@ -634,8 +627,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adapter.attached_files, [])
         self.assertEqual(adapter.prompts, [])
 
-    async def test_tui_shows_pdf_attach_failure_status(self) -> None:
-        adapter = PdfAttachTgenieAdapter(
+    async def test_tui_shows_attachment_failure_status(self) -> None:
+        adapter = AttachmentTgenieAdapter(
             requested_path="case.txt",
             followup_response="The PDF was rejected.",
         )
@@ -655,16 +648,16 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Working: Uploading PDF", messages)
-                self.assertIn("Working: PDF upload failed", messages)
+                self.assertIn("Working: Uploading attachment", messages)
+                self.assertIn("Working: Attachment upload failed", messages)
                 self.assertIn("Atlas: The PDF was rejected.", messages)
 
-        self.assertEqual(adapter.attached_pdfs, [])
+        self.assertEqual(adapter.attached_files, [])
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"ok": false', adapter.messages[1])
 
-    async def test_tui_shows_pdf_attach_timeout_status(self) -> None:
-        adapter = PdfAttachTgenieAdapter(
+    async def test_tui_shows_attachment_timeout_status(self) -> None:
+        adapter = AttachmentTgenieAdapter(
             requested_path="case.pdf",
             attach_error=TimeoutError("Timed out waiting for attached file name."),
             followup_response="The PDF upload timed out.",
@@ -685,11 +678,11 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Working: Uploading PDF", messages)
-                self.assertIn("Working: PDF upload timed out", messages)
+                self.assertIn("Working: Uploading attachment", messages)
+                self.assertIn("Working: Attachment upload timed out", messages)
                 self.assertIn("Atlas: The PDF upload timed out.", messages)
 
-        self.assertEqual(adapter.attached_pdfs, [])
+        self.assertEqual(adapter.attached_files, [])
         self.assertIn('"type": "atlas.tool_result"', adapter.messages[1])
         self.assertIn('"status": "timeout"', adapter.messages[1])
 
@@ -1456,7 +1449,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("LLM Wiki", adapter.sent_messages[0])
 
     async def test_llm_wiki_ingest_command_runs_ingestion_with_real_tgenie_adapter(self) -> None:
-        adapter = PdfAttachTgenieAdapter(
+        adapter = AttachmentTgenieAdapter(
             requested_path="case.pdf",
             followup_response="Ingested case.pdf into the wiki.",
         )
@@ -1476,12 +1469,12 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
-                self.assertIn("Working: Uploading PDF", messages)
+                self.assertIn("Working: Uploading attachment", messages)
                 self.assertIn("Working: Rendering HTML mirror", messages)
                 self.assertIn("Working: Rendering graph", messages)
                 self.assertIn("Atlas: Ingested case.pdf into the wiki.", messages)
 
-            self.assertEqual(adapter.attached_pdfs, [(workspace / "case.pdf").resolve()])
+            self.assertEqual(adapter.attached_files, [(workspace / "case.pdf").resolve()])
             self.assertTrue((workspace / "wiki" / "output" / "html" / "index.html").is_file())
             self.assertTrue((workspace / "wiki" / "output" / "graph" / "index.html").is_file())
 

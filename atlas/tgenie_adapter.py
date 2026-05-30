@@ -53,9 +53,6 @@ class TgenieConversationClient(Protocol):
     async def attach_file(self, path: Path) -> None:
         pass
 
-    async def attach_pdf(self, path: Path) -> None:
-        pass
-
 
 class TgenieConversationError(RuntimeError):
     pass
@@ -70,7 +67,9 @@ def build_atlas_bootstrap_prompt(user_prompt: str) -> str:
 
 Atlas is the local controller. You are operating through a browser UI and cannot directly read, write, or execute files on the user's machine.
 
-When you need local workspace access or a local command, ask Atlas for exactly one tool call. Use one fenced JSON block with this shape:
+When you need local workspace access or a local command, ask Atlas for either one single tool call or one read-only tool batch.
+
+Use one fenced JSON block with this shape for a single tool call:
 
 ```json
 {{
@@ -80,27 +79,46 @@ When you need local workspace access or a local command, ask Atlas for exactly o
 }}
 ```
 
+Use one fenced JSON block with this shape for an independent read-only batch:
+
+```json
+{{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {{
+      "id": "read-readme",
+      "tool": "file.read",
+      "args": {{"path": "README.md"}}
+    }}
+  ]
+}}
+```
+
 Rules:
-- The JSON `type` must be `atlas.tool_call`.
-- The JSON must include `tool` and `args`.
+- The JSON `type` must be `atlas.tool_call` or `atlas.tool_batch`.
+- A single tool call must include `tool` and `args`.
 - `args` must be a JSON object.
-- Request only one tool call at a time.
+- Request only one single tool call, or one `atlas.tool_batch`, per model response.
+- `atlas.tool_batch` is only for independent read-only calls: `file.list`, `file.read`, and `file.search`.
+- `atlas.tool_batch` can include at most 5 calls. Each call must include a unique string `id`.
+- The batch limit is not an inspection limit. If a task requires more than 5 files, searches, or directories, continue with another useful batch or single tool call after Atlas returns the previous result.
+- Do not put `file.write`, `shell.run`, or `file.attach` in a batch. Request those as a single `atlas.tool_call`.
 - Do not claim that you have inspected, read, or understood local files unless Atlas provides file content, an attachment, or saved evidence in the conversation.
 - Preserve useful observations from attachments as structured evidence, including source identity, observation, inference, uncertainty, confidence, and coordinates when available.
 - Available tools include {format_tool_names()}.
 - Use `file.attach` for workspace-local attachment paths ending in `.pdf`, `.jpg`, `.jpeg`, or `.png`, for example `{{"path": "docs/report.pdf"}}` or `{{"path": "photos/panel.png"}}`.
-- `pdf.attach` is still accepted for workspace-local PDF paths, but prefer `file.attach`.
 
 Completion discipline:
 - Treat the user task as work to complete, not just a question to answer, when Atlas tools can safely move it forward.
-- Before giving a final answer, keep requesting one useful tool call at a time until the task is complete, the next step requires a user decision, Atlas returns a blocking tool error, or no relevant safe check remains.
+- Before giving a final answer, keep requesting one useful single tool call or one useful read-only batch at a time until the task is complete, the next step requires a user decision, Atlas returns a blocking tool error, or no relevant safe check remains.
 - For codebase tasks, inspect relevant files with `file.list`, `file.search`, and `file.read`; make the smallest needed `file.write` changes; then run targeted checks with `shell.run` when tests, lint, type checks, or build commands are discoverable.
 - If a check fails and the fix is in scope, inspect the failure, update the files, and rerun the targeted check before the final answer.
 - Do not ask the user for clarification before doing low-risk inspection that could clarify the task.
-- Do not stop after the first file, first search result, or first tool result when an obvious next check remains.
+- Do not stop after the first file, first search result, or first tool result when an obvious next check remains. Use read-only batch when several independent reads or searches are useful.
+- When the user asks you to inspect all relevant files or complete a codebase task, do not stop after one 5-call batch if more relevant files or checks remain. Continue until the relevant scope is covered, a blocking error occurs, or the next step needs a user decision.
 - In the final answer, report what you changed or verified, which checks ran, and any concrete blocker or unverified part.
 
-Atlas will send tool output back to you as an `atlas.tool_result` fenced JSON block in a later turn. Continue from that result when it arrives.
+Atlas will send tool output back to you as an `atlas.tool_result` or `atlas.tool_batch_result` fenced JSON block in a later turn. Continue from that result when it arrives.
 
 User task:
 {cleaned_prompt}"""
@@ -130,9 +148,6 @@ class TgenieConversationAdapter:
 
     async def attach_file(self, path: Path) -> None:
         await self._attach_files((path,))
-
-    async def attach_pdf(self, path: Path) -> None:
-        await self.attach_file(path)
 
     async def send_single_turn_with_attachments(
         self,

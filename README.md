@@ -19,7 +19,8 @@ Atlas v1 提供：
 - 單一 workspace 邊界。
 - tGenie 對話與 tool loop。
 - workspace file tools：`file.list`、`file.read`、`file.search`、`file.write`。
-- workspace attachment：`file.attach` 支援 `.pdf`、`.jpg`、`.jpeg`、`.png`；`pdf.attach` 保留給舊的 PDF-only 流程。
+- read-only tool batch：`atlas.tool_batch` 一次最多 5 個獨立的 `file.list`、`file.read`、`file.search`。
+- workspace attachment：`file.attach` 支援 `.pdf`、`.jpg`、`.jpeg`、`.png`。
 - Attachment evidence 結構化證據，用來保存附件回合中的 observation、inference、uncertainty、confidence 與 coordinates。
 - 保守的 `shell.run` 安全政策。
 - slash command：`/help`、`/exit`、`/login-done`、`/fa-stem brief <path>`、`/llm-wiki`、`/llm-wiki ingest <path>`、`/skill-creator`。
@@ -188,10 +189,10 @@ Process：
 
 1. Atlas 把 prompt 送到目前的 tGenie conversation。
 2. Bootstrap prompt 會要求 tGenie 把任務當成要完成的工作；在 final answer 前，先用安全且相關的 tool call 盡可能完成檔案檢查、搜尋、修改與測試。
-3. tGenie 直接回答，或輸出 `atlas.tool_call` 要求本機工具。
+3. tGenie 直接回答，或輸出 `atlas.tool_call` 要求單一工具；如果只是獨立的讀取、列檔或搜尋，也可以輸出 `atlas.tool_batch` 一次要求最多 5 個 read-only tool。
 4. 如果有 tool call，Atlas 會解析 fenced JSON；如果 tGenie 網頁 UI 已經把 Markdown fence 渲染掉，Atlas 也會掃描完整 JSON object。
 5. Atlas 只在目前 workspace 內執行允許的工具。
-6. Atlas 把 `atlas.tool_result` 回貼給 tGenie。
+6. Atlas 把 `atlas.tool_result` 或 `atlas.tool_batch_result` 回貼給 tGenie。
 7. tGenie 根據工具結果繼續下一個檢查，或在已完成、被工具錯誤阻擋、需要使用者決策時產生 final answer。
 8. 如果同一回合要求太多次 tool call，Atlas 會停止該回合，避免無限循環。
 
@@ -200,11 +201,11 @@ Output：
 - Atlas TUI transcript 顯示 `Working:` 狀態與最後 `Atlas:` 回覆。
 - 如果 tGenie 使用 `file.write`，workspace 內會產生或更新檔案。
 
-這個做法是什麼：Atlas 把 tGenie 當成主要推理模型，本機工具由 Atlas 代為執行；tool call 解析會依 JSON 結構判斷完整物件，不用 regex 去切 `{...}`。
+這個做法是什麼：Atlas 把 tGenie 當成主要推理模型，本機工具由 Atlas 代為執行；tool call 解析會依 JSON 結構判斷完整物件，不用 regex 去切 `{...}`。`atlas.tool_batch` 只用於 read-only 檔案檢查，一次最多 5 個 call。
 
 為什麼這樣做：tGenie 是網頁版 LLM，不一定支援 native function calling；文字型 tool-call protocol 可以先讓它參與本機工作流程。網頁 UI 可能把 Markdown code fence 渲染掉，所以 Atlas 不能只依賴反引號。
 
-影響與取捨：流程清楚、容易檢查，也比較能處理 nested `args`；bootstrap prompt 會鼓勵 tGenie 在回覆前多做合理檢查，但取捨是一次只處理一個 tool call，速度比平行工具慢。Atlas 也會限制單回合 tool call 次數，避免模型卡在無限循環。
+影響與取捨：流程清楚、容易檢查，也比較能處理 nested `args`；bootstrap prompt 會鼓勵 tGenie 在回覆前多做合理檢查。read-only batch 可以減少讀多個檔案或搜尋多個線索時的來回時間；取捨是 batch 只能做無副作用工具，`file.write`、`shell.run`、`file.attach` 仍維持一次一個。5 個 call 是單批上限，不是總檢查上限；如果還有相關檔案或檢查，tGenie 應繼續請求下一批。Atlas 也會限制單回合 tool call 次數，避免模型卡在無限循環。
 
 ### 2. Workspace 檔案工作
 
@@ -215,20 +216,21 @@ Input：
 Process：
 
 1. tGenie 需要檔案資訊時，輸出 `file.list`、`file.read` 或 `file.search` tool call。
-2. Atlas 檢查 path 必須留在 workspace 內。
-3. Atlas 執行檔案工具並回傳結果。
-4. tGenie 根據結果回答，或要求 `file.write` 產出檔案。
+2. 如果需要多個互不依賴的讀取、列檔或搜尋，tGenie 可以用 `atlas.tool_batch` 一次送出最多 5 個 call；如果還沒看完整個相關範圍，下一輪應繼續送下一批。
+3. Atlas 檢查 path 必須留在 workspace 內。
+4. Atlas 執行檔案工具並回傳結果。
+5. tGenie 根據結果回答，或要求 `file.write` 產出檔案。
 
 Output：
 
 - TUI 顯示回答。
 - `file.write` 會在 workspace 內寫入 Markdown、HTML 或文字檔。
 
-這個做法是什麼：所有檔案讀寫都經過 workspace path 檢查。
+這個做法是什麼：所有檔案讀寫都經過 workspace path 檢查；read-only batch 只是把多個安全檔案查詢包在同一回合。
 
 為什麼這樣做：避免模型誤讀或誤寫 workspace 外的公司或個人檔案。
 
-影響與取捨：安全邊界比較清楚；取捨是不能直接操作 workspace 外的檔案。
+影響與取捨：安全邊界比較清楚，也能加速多檔案檢查；取捨是不能直接操作 workspace 外的檔案，而且 batch 不能寫檔、跑 shell 或上傳附件。
 
 ### 3. PDF 摘要或分析與圖片附件
 
@@ -343,7 +345,7 @@ Process：
 2. Atlas 收集單一 PDF 或資料夾中的 PDF。
 3. Atlas 初始化 `wiki/` 結構。
 4. Atlas 以每批 1 個 PDF 的保守方式送給 tGenie。
-5. tGenie 使用 `pdf.attach` 讀取 PDF。
+5. tGenie 使用 `file.attach` 讀取 PDF。
 6. tGenie 使用 file tools 更新 wiki Markdown。
 7. Atlas 重新產生 HTML mirror 與 graph HTML。
 
@@ -406,8 +408,8 @@ Workspace-local skill 位置：
 - Atlas 啟動時只綁定一個 workspace。
 - `file.list`、`file.read`、`file.search`、`file.write` 都只能操作 workspace 內 path。
 - `file.read` 和 `file.search` 有預設大小與結果數量上限，避免模型一次讀取或搜尋過多資料。
+- `atlas.tool_batch` 只允許 `file.list`、`file.read`、`file.search`，一次最多 5 個 call。
 - `file.attach` 只接受 workspace 內 `.pdf`、`.jpg`、`.jpeg`、`.png`。
-- `pdf.attach` 保留給舊流程，只接受 workspace 內 `.pdf`。
 - absolute path、`..` escape、指向 workspace 外的 path 會被拒絕。
 - `shell.run` 預設保守。大部分 command 會回傳 `confirmation-required`，高風險 command 會回傳 `rejected`，允許執行的 command 也有 timeout。
 

@@ -15,7 +15,6 @@ class FakeAsyncTgenieConversation:
         self.attach_error = attach_error
         self.sent_messages: list[str] = []
         self.attached_files: list[Path] = []
-        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.sent_messages.append(user_prompt)
@@ -29,9 +28,6 @@ class FakeAsyncTgenieConversation:
         if self.attach_error is not None:
             raise self.attach_error
         self.attached_files.append(path)
-
-    async def attach_pdf(self, path: Path) -> None:
-        await self.attach_file(path)
 
 
 class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
@@ -105,6 +101,51 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         assert result.events[2].result is not None
         self.assertTrue(result.events[2].result["ok"])
         self.assertEqual(result.events[3].message, "The workspace note says: needle here.")
+
+    async def test_real_tool_loop_executes_read_only_tool_batch_and_returns_final_response(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "README.md").write_text("Atlas readme", encoding="utf-8")
+            (workspace / "notes.md").write_text("needle here", encoding="utf-8")
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {"id": "list-root", "tool": "file.list", "args": {"path": "."}},
+    {"id": "read-readme", "tool": "file.read", "args": {"path": "README.md"}},
+    {"id": "search-needle", "tool": "file.search", "args": {"query": "needle"}}
+  ]
+}
+```""",
+                    "The batch found README and needle.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Inspect workspace.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "The batch found README and needle.")
+        self.assertIsNone(result.error)
+        self.assertIn("executing-tool-batch", result.status_events)
+        self.assertIn("sending-tool-batch-result", result.status_events)
+        self.assertIn('"type": "atlas.tool_batch_result"', conversation.sent_messages[1])
+        self.assertIn('"id": "list-root"', conversation.sent_messages[1])
+        self.assertIn('"id": "read-readme"', conversation.sent_messages[1])
+        self.assertIn('"id": "search-needle"', conversation.sent_messages[1])
+        self.assertIn('"content": "Atlas readme"', conversation.sent_messages[1])
+        self.assertEqual(
+            [event.kind for event in result.events],
+            ["user_prompt", "assistant_tool_batch", "tool_batch_result", "assistant_final"],
+        )
+        self.assertEqual(result.events[1].tool, "atlas.tool_batch")
+        self.assertIsNotNone(result.events[2].result)
+        assert result.events[2].result is not None
+        self.assertEqual(len(result.events[2].result["results"]), 3)
 
     async def test_real_tool_loop_accepts_plain_json_tool_call_with_nested_args(self) -> None:
         with TemporaryDirectory() as directory:
@@ -212,6 +253,39 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(expected_code, conversation.sent_messages[1])
                 self.assertIn("Send one corrected atlas.tool_call", conversation.sent_messages[1])
 
+    async def test_real_tool_loop_rejects_side_effect_tool_inside_batch(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    """```json
+{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {
+      "id": "write-notes",
+      "tool": "file.write",
+      "args": {"path": "notes.md", "content": "should not be written"}
+    }
+  ]
+}
+```""",
+                    "I will request that as a single tool call instead.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Write through batch.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+        self.assertEqual(result.final_response, "I will request that as a single tool call instead.")
+        self.assertFalse((workspace / "notes.md").exists())
+        self.assertIn("atlas.tool_call_error", conversation.sent_messages[1])
+        self.assertIn("batch-tool-not-allowed", conversation.sent_messages[1])
+        self.assertIn("file.write", conversation.sent_messages[1])
+
     async def test_real_tool_loop_stops_after_max_tool_calls(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory)
@@ -311,7 +385,7 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeAsyncTgenieConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "reports/case.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "reports/case.pdf"}}
 ```""",
                     "The PDF is attached.",
                 ]
@@ -324,9 +398,9 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.final_response, "The PDF is attached.")
-        self.assertEqual(conversation.attached_pdfs, [pdf_path.resolve()])
+        self.assertEqual(conversation.attached_files, [pdf_path.resolve()])
         self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
-        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
         self.assertIn('"status": "uploaded"', conversation.sent_messages[1])
         self.assertIn('"path": "reports/case.pdf"', conversation.sent_messages[1])
 
@@ -369,7 +443,7 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeAsyncTgenieConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "reports/case.txt"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "reports/case.txt"}}
 ```""",
                     "I need a PDF file instead.",
                 ]
@@ -382,9 +456,9 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.final_response, "I need a PDF file instead.")
-        self.assertEqual(conversation.attached_pdfs, [])
+        self.assertEqual(conversation.attached_files, [])
         self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
-        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
         self.assertIn('"ok": false', conversation.sent_messages[1])
         self.assertIn("only accepts .pdf", conversation.sent_messages[1])
 
@@ -437,7 +511,7 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
                     conversation = FakeAsyncTgenieConversation(
                         responses=[
                             f"""```json
-{{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {{"path": "{requested_path}"}}}}
+{{"type": "atlas.tool_call", "tool": "file.attach", "args": {{"path": "{requested_path}"}}}}
 ```""",
                             "The PDF path was rejected.",
                         ]
@@ -450,9 +524,9 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
                     )
 
                 self.assertEqual(result.final_response, "The PDF path was rejected.")
-                self.assertEqual(conversation.attached_pdfs, [])
+                self.assertEqual(conversation.attached_files, [])
                 self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
-                self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+                self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
                 self.assertIn('"ok": false', conversation.sent_messages[1])
                 self.assertIn(expected_error, conversation.sent_messages[1])
 
@@ -467,7 +541,7 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeAsyncTgenieConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "linked.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "linked.pdf"}}
 ```""",
                     "That PDF path is outside the workspace.",
                 ]
@@ -480,9 +554,9 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.final_response, "That PDF path is outside the workspace.")
-        self.assertEqual(conversation.attached_pdfs, [])
+        self.assertEqual(conversation.attached_files, [])
         self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
-        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
         self.assertIn('"ok": false', conversation.sent_messages[1])
         self.assertIn("workspace", conversation.sent_messages[1])
 
@@ -494,7 +568,7 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeAsyncTgenieConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "case.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "case.pdf"}}
 ```""",
                     "The PDF upload failed.",
                 ],
@@ -508,10 +582,10 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(result.final_response, "The PDF upload failed.")
-        self.assertEqual(conversation.attached_pdfs, [])
-        self.assertIn("pdf-upload-failed", result.status_events)
+        self.assertEqual(conversation.attached_files, [])
+        self.assertIn("attachment-upload-failed", result.status_events)
         self.assertIn('"type": "atlas.tool_result"', conversation.sent_messages[1])
-        self.assertIn('"tool": "pdf.attach"', conversation.sent_messages[1])
+        self.assertIn('"tool": "file.attach"', conversation.sent_messages[1])
         self.assertIn('"ok": false', conversation.sent_messages[1])
         self.assertIn("Attach button disappeared", conversation.sent_messages[1])
 

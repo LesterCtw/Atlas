@@ -17,11 +17,11 @@ TOOL_DEFINITIONS = (
     ToolDefinition("file.write", "Write a UTF-8 workspace text file."),
     ToolDefinition("shell.run", "Run a shell command through Atlas safety policy."),
     ToolDefinition("file.attach", "Attach a workspace-local PDF or image.", attach=True),
-    ToolDefinition("pdf.attach", "Legacy PDF-only attachment tool.", attach=True),
 )
 
 SUPPORTED_TOOL_NAMES = frozenset(tool.name for tool in TOOL_DEFINITIONS)
 ATTACH_TOOL_NAMES = frozenset(tool.name for tool in TOOL_DEFINITIONS if tool.attach)
+READ_ONLY_BATCH_TOOL_NAMES = frozenset({"file.list", "file.read", "file.search"})
 
 
 def format_tool_names() -> str:

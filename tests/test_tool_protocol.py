@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from atlas.tool_protocol import ToolCall, ToolCallError, parse_tool_call
+from atlas.tool_protocol import ToolBatch, ToolBatchCall, ToolCall, ToolCallError, parse_tool_call
 
 
 class ToolProtocolTests(unittest.TestCase):
@@ -64,6 +64,41 @@ JSON
             ),
         )
 
+    def test_parses_read_only_tool_batch(self) -> None:
+        model_response = """```json
+{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {
+      "id": "list-root",
+      "tool": "file.list",
+      "args": {"path": "."}
+    },
+    {
+      "id": "read-readme",
+      "tool": "file.read",
+      "args": {"path": "README.md"}
+    }
+  ]
+}
+```"""
+
+        result = parse_tool_call(
+            model_response,
+            available_tools={"file.list", "file.read", "file.write"},
+            batch_tools={"file.list", "file.read"},
+        )
+
+        self.assertEqual(
+            result,
+            ToolBatch(
+                calls=(
+                    ToolBatchCall(id="list-root", tool="file.list", args={"path": "."}),
+                    ToolBatchCall(id="read-readme", tool="file.read", args={"path": "README.md"}),
+                )
+            ),
+        )
+
     def test_plain_malformed_tool_call_returns_retry_error(self) -> None:
         model_response = """JSON
 {
@@ -119,6 +154,22 @@ JSON
         self.assertIsInstance(result, ToolCallError)
         self.assertEqual(result.code, "unknown-tool")
         self.assertIn("missing", result.message)
+
+    def test_rejects_removed_pdf_attach_tool_name(self) -> None:
+        removed_tool_name = "pdf" + ".attach"
+        model_response = f"""```json
+{{
+  "type": "atlas.tool_call",
+  "tool": "{removed_tool_name}",
+  "args": {{"path": "docs/case.pdf"}}
+}}
+```"""
+
+        result = parse_tool_call(model_response, available_tools={"file.attach"})
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "unknown-tool")
+        self.assertIn(removed_tool_name, result.message)
 
     def test_rejects_missing_args(self) -> None:
         model_response = """```json
@@ -192,6 +243,69 @@ JSON
         self.assertIsInstance(result, ToolCallError)
         self.assertEqual(result.code, "multiple-tool-calls")
         self.assertIn("single", result.message)
+
+    def test_rejects_tool_batch_larger_than_limit(self) -> None:
+        calls = ",\n".join(
+            f'{{"id": "read-{index}", "tool": "file.read", "args": {{"path": "{index}.md"}}}}'
+            for index in range(6)
+        )
+        model_response = f"""```json
+{{"type": "atlas.tool_batch", "calls": [{calls}]}}
+```"""
+
+        result = parse_tool_call(
+            model_response,
+            available_tools={"file.read"},
+            batch_tools={"file.read"},
+        )
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "batch-too-large")
+        self.assertIn("at most 5", result.message)
+
+    def test_rejects_side_effect_tool_in_batch(self) -> None:
+        model_response = """```json
+{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {
+      "id": "write-notes",
+      "tool": "file.write",
+      "args": {"path": "notes.md", "content": "hello"}
+    }
+  ]
+}
+```"""
+
+        result = parse_tool_call(
+            model_response,
+            available_tools={"file.read", "file.write"},
+            batch_tools={"file.read"},
+        )
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "batch-tool-not-allowed")
+        self.assertIn("file.write", result.message)
+
+    def test_rejects_duplicate_batch_call_ids(self) -> None:
+        model_response = """```json
+{
+  "type": "atlas.tool_batch",
+  "calls": [
+    {"id": "read", "tool": "file.read", "args": {"path": "a.md"}},
+    {"id": "read", "tool": "file.read", "args": {"path": "b.md"}}
+  ]
+}
+```"""
+
+        result = parse_tool_call(
+            model_response,
+            available_tools={"file.read"},
+            batch_tools={"file.read"},
+        )
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "duplicate-batch-call-id")
 
 
 if __name__ == "__main__":

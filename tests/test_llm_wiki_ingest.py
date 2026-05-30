@@ -12,7 +12,6 @@ class FakeIngestConversation:
         self.responses = list(responses)
         self.sent_messages: list[str] = []
         self.attached_files: list[Path] = []
-        self.attached_pdfs = self.attached_files
 
     async def send_single_turn(self, user_prompt: str) -> str:
         self.sent_messages.append(user_prompt)
@@ -24,9 +23,6 @@ class FakeIngestConversation:
 
     async def attach_file(self, path: Path) -> None:
         self.attached_files.append(path)
-
-    async def attach_pdf(self, path: Path) -> None:
-        await self.attach_file(path)
 
 
 class FailingSecondBatchConversation(FakeIngestConversation):
@@ -47,7 +43,7 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeIngestConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "docs/case.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "docs/case.pdf"}}
 ```""",
                     """```json
 {"type": "atlas.tool_call", "tool": "file.write", "args": {"path": "wiki/pages/sources/case-report.md", "content": "---\\ntitle: Case Report\\ntype: source\\ntags: [pdf]\\nconfidence: high\\ncontradiction: false\\nsource: docs/case.pdf\\n---\\n# Case Report\\n\\nSource PDF: docs/case.pdf\\n"}}
@@ -76,7 +72,7 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.ingested_paths, ["docs/case.pdf"])
             self.assertIn("rendering-html", result.status_events)
             self.assertIn("rendering-graph", result.status_events)
-            self.assertEqual(conversation.attached_pdfs, [pdf_path.resolve()])
+            self.assertEqual(conversation.attached_files, [pdf_path.resolve()])
             self.assertTrue(source_page.is_file())
             self.assertIn("source: docs/case.pdf", source_page.read_text(encoding="utf-8"))
             self.assertIn("# LLM Wiki Index", (workspace / "wiki" / "index.md").read_text(encoding="utf-8"))
@@ -114,7 +110,7 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertIn(expected_message, str(caught.exception))
                 self.assertEqual(conversation.sent_messages, [])
-                self.assertEqual(conversation.attached_pdfs, [])
+                self.assertEqual(conversation.attached_files, [])
 
     async def test_directory_ingestion_processes_workspace_pdfs_one_at_a_time(self) -> None:
         with TemporaryDirectory() as directory:
@@ -127,14 +123,14 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
             conversation = FakeIngestConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "docs/a.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "docs/a.pdf"}}
 ```""",
                     """```json
 {"type": "atlas.tool_call", "tool": "file.write", "args": {"path": "wiki/pages/sources/a.md", "content": "---\\ntitle: A Source\\ntype: source\\ntags: [pdf]\\nconfidence: high\\ncontradiction: false\\nsource: docs/a.pdf\\n---\\n# A Source\\n\\nSource PDF: docs/a.pdf\\n"}}
 ```""",
                     "Finished docs/a.pdf.",
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "docs/b.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "docs/b.pdf"}}
 ```""",
                     """```json
 {"type": "atlas.tool_call", "tool": "file.write", "args": {"path": "wiki/pages/sources/b.md", "content": "---\\ntitle: B Source\\ntype: source\\ntags: [pdf]\\nconfidence: high\\ncontradiction: false\\nsource: docs/b.pdf\\n---\\n# B Source\\n\\nSource PDF: docs/b.pdf\\n"}}
@@ -150,7 +146,7 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(result.ingested_paths, ["docs/a.pdf", "docs/b.pdf"])
-            self.assertEqual(conversation.attached_pdfs, [(docs / "a.pdf").resolve(), (docs / "b.pdf").resolve()])
+            self.assertEqual(conversation.attached_files, [(docs / "a.pdf").resolve(), (docs / "b.pdf").resolve()])
             self.assertTrue((workspace / "wiki" / "pages" / "sources" / "a.md").is_file())
             self.assertTrue((workspace / "wiki" / "pages" / "sources" / "b.md").is_file())
             self.assertEqual(conversation.sent_messages[0].count("/llm-wiki ingest docs/a.pdf"), 1)
@@ -168,7 +164,7 @@ class LlmWikiIngestTests(unittest.IsolatedAsyncioTestCase):
             conversation = FailingSecondBatchConversation(
                 responses=[
                     """```json
-{"type": "atlas.tool_call", "tool": "pdf.attach", "args": {"path": "docs/a.pdf"}}
+{"type": "atlas.tool_call", "tool": "file.attach", "args": {"path": "docs/a.pdf"}}
 ```""",
                     """```json
 {"type": "atlas.tool_call", "tool": "file.write", "args": {"path": "wiki/pages/sources/a.md", "content": "---\\ntitle: A Source\\ntype: source\\ntags: [pdf]\\nconfidence: high\\ncontradiction: false\\nsource: docs/a.pdf\\n---\\n# A Source\\n\\nSource PDF: docs/a.pdf\\n"}}

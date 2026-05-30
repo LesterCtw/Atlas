@@ -44,9 +44,6 @@ class FileAttachment:
     relative_path: str
 
 
-PdfAttachment = FileAttachment
-
-
 class ToolRuntime:
     def __init__(
         self,
@@ -118,16 +115,6 @@ class ToolRuntime:
         if path.is_dir():
             raise IsADirectoryError
         return FileAttachment(path=path, relative_path=self._relative_path(path))
-
-    def prepare_pdf_attachment(self, args: dict[str, Any]) -> PdfAttachment:
-        path = self._resolve_workspace_path(str(args["path"]))
-        if path.suffix.lower() != ".pdf":
-            raise ToolRuntimeError("PDF attach only accepts .pdf files.")
-        if not path.exists():
-            raise FileNotFoundError
-        if path.is_dir():
-            raise IsADirectoryError
-        return PdfAttachment(path=path, relative_path=self._relative_path(path))
 
     def _write_file(self, args: dict[str, Any]) -> ToolResult:
         path = self._resolve_workspace_path(str(args["path"]))

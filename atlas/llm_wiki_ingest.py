@@ -6,7 +6,7 @@ from pathlib import Path
 from atlas.commands import format_skill_instructions
 from atlas.skills import SkillLoader
 from atlas.tgenie_tool_loop import TgenieToolConversation, run_tgenie_tool_loop
-from atlas.tool_runtime import PdfAttachment, ToolRuntime, ToolRuntimeError
+from atlas.tool_runtime import FileAttachment, ToolRuntime, ToolRuntimeError
 from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path, workspace_relative_path
 from atlas.wiki import initialize_wiki, render_graph_html, render_html_mirror
 
@@ -87,7 +87,7 @@ def build_llm_wiki_ingest_prompt(*, workspace: Path, source_paths: list[str], ba
         "Ingest the following workspace-local PDF source into the LLM Wiki:\n"
         f"{source_list}\n\n"
         "Required behavior:\n"
-        "- Request `pdf.attach` for the source PDF before reading or summarizing it.\n"
+        "- Request `file.attach` for the source PDF before reading or summarizing it.\n"
         "- Update wiki pages under `wiki/pages/`, plus `wiki/index.md` and `wiki/log.md`.\n"
         "- Preserve source traceability in generated Markdown so readers can identify the originating PDF.\n"
         "- Use Atlas file tools to write every wiki change.\n"
@@ -95,14 +95,17 @@ def build_llm_wiki_ingest_prompt(*, workspace: Path, source_paths: list[str], ba
     )
 
 
-def collect_ingest_pdfs(runtime: ToolRuntime, requested_path: str) -> list[PdfAttachment]:
+def collect_ingest_pdfs(runtime: ToolRuntime, requested_path: str) -> list[FileAttachment]:
     candidate = resolve_workspace_input(runtime, requested_path)
     if candidate.is_dir():
-        attachments = [
-            runtime.prepare_pdf_attachment({"path": workspace_relative_path(runtime.workspace, path)})
-            for path in sorted(candidate.iterdir(), key=lambda item: item.name)
-            if path.is_file() and path.suffix.lower() == ".pdf"
-        ]
+        try:
+            attachments = [
+                runtime.prepare_file_attachment({"path": workspace_relative_path(runtime.workspace, path)})
+                for path in sorted(candidate.iterdir(), key=lambda item: item.name)
+                if path.is_file() and path.suffix.lower() == ".pdf"
+            ]
+        except ToolRuntimeError as error:
+            raise LlmWikiIngestError(str(error)) from error
         if not attachments:
             raise LlmWikiIngestError("PDF directory contains no .pdf files.")
         return attachments
@@ -119,9 +122,14 @@ def resolve_workspace_input(runtime: ToolRuntime, requested_path: str) -> Path:
     return resolved
 
 
-def prepare_ingest_pdf(runtime: ToolRuntime, requested_path: str) -> PdfAttachment:
+def prepare_ingest_pdf(runtime: ToolRuntime, requested_path: str) -> FileAttachment:
     try:
-        return runtime.prepare_pdf_attachment({"path": requested_path})
+        path = resolve_workspace_path(runtime.workspace, requested_path)
+        if path.suffix.lower() != ".pdf":
+            raise ToolRuntimeError("PDF ingest only accepts .pdf files.")
+        return runtime.prepare_file_attachment({"path": requested_path})
+    except WorkspacePathError as error:
+        raise LlmWikiIngestError(str(error)) from error
     except ToolRuntimeError as error:
         raise LlmWikiIngestError(str(error)) from error
     except FileNotFoundError as error:

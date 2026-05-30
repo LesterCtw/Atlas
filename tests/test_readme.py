@@ -39,13 +39,16 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("Skill 使用", readme)
         self.assertIn("atlas.tool_call", readme)
         self.assertIn("atlas.tool_result", readme)
+        self.assertIn("atlas.tool_batch", readme)
+        self.assertIn("atlas.tool_batch_result", readme)
         self.assertIn("file.list", readme)
         self.assertIn("file.read", readme)
         self.assertIn("file.search", readme)
         self.assertIn("file.write", readme)
         self.assertIn("file.attach", readme)
-        self.assertIn("pdf.attach", readme)
         self.assertIn("shell.run", readme)
+        self.assertIn("一次最多 5 個", readme)
+        self.assertIn("不是總檢查上限", readme)
 
     def test_readme_explains_outputs_and_limits(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -116,6 +119,8 @@ class DocumentationTests(unittest.TestCase):
             "hi" + "tl",
             "scripts/" + "pr" + "obe_tgenie.py",
             "hi" + "tl_collect_windows.ps1",
+            "pdf" + ".attach",
+            "pdf-only",
         )
         for removed_term in removed_terms:
             self.assertNotIn(removed_term, readme)
