@@ -160,6 +160,7 @@ TUI 操作：
 - 空白輸入框中可用上下方向鍵瀏覽送出歷史。
 - 輸入 `/` 會顯示 slash command 選單。
 - 使用上下方向鍵選擇 slash command。
+- 如果 slash command 選單只剩一個候選，第一次按 `Enter` 或 `Tab` 會補齊 command 並加上尾端空白；再按一次 `Enter` 才會送出。
 
 常用命令：
 
@@ -365,13 +366,15 @@ Input：
 ```text
 /llm-wiki
 /skill-creator
+/skill-creator <prompt>
 ```
 
 Process：
 
 1. Atlas 找到內建 skill 或 workspace-local skill。
 2. Atlas 把 skill instructions 注入目前工作流程。
-3. `/llm-wiki` 會同時初始化 `wiki/`。
+3. 如果 skill command 後面有 `<prompt>`，Atlas 會用該 skill instructions 直接執行這段 prompt。
+4. `/llm-wiki` 會同時初始化 `wiki/`。
 
 Output：
 

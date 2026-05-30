@@ -1099,6 +1099,49 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("loaded skill: llm-wiki", messages)
                 self.assertTrue(pilot.app.query_one("#slash-suggestions", Static).has_class("hidden"))
 
+    async def test_single_slash_suggestion_enter_completes_without_submitting(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            skill_dir = workspace / ".atlas" / "skills" / "repair-notes"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("# Repair Notes\n\nFix notes.", encoding="utf-8")
+            app = AtlasApp(workspace=workspace)
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                await pilot.press("/", "r", "e", "p", "enter")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "/repair-notes ")
+                self.assertNotIn("Loaded skill: repair-notes", messages)
+                self.assertTrue(pilot.app.query_one("#slash-suggestions", Static).has_class("hidden"))
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "")
+                self.assertIn("Loaded skill: repair-notes", messages)
+
+    async def test_single_slash_suggestion_tab_completes_without_submitting(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            skill_dir = workspace / ".atlas" / "skills" / "repair-notes"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text("# Repair Notes\n\nFix notes.", encoding="utf-8")
+            app = AtlasApp(workspace=workspace)
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                await pilot.press("/", "r", "e", "p", "tab")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "/repair-notes ")
+                self.assertNotIn("Loaded skill: repair-notes", messages)
+                self.assertTrue(pilot.app.query_one("#slash-suggestions", Static).has_class("hidden"))
+
     async def test_app_shows_fake_tool_loop_status_updates(self) -> None:
         adapter = FakeTgenieAdapter(
             responses=[
@@ -1309,6 +1352,36 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(adapter.sent_messages), 1)
         self.assertIn('<atlas.skill_instructions name="skill-creator">', adapter.sent_messages[0])
         self.assertIn("Skill Creator", adapter.sent_messages[0])
+
+    async def test_skill_command_suffix_runs_prompt_with_skill_instructions(self) -> None:
+        adapter = FakeTgenieAdapter(responses=["Updated notes."])
+
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            skill_dir = workspace / ".atlas" / "skills" / "repair-notes"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "# Repair Notes\n\nFix notes.",
+                encoding="utf-8",
+            )
+            app = AtlasApp(
+                workspace=workspace,
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "/repair-notes summarize latest changes"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertIn("Loaded skill: repair-notes", messages)
+                self.assertIn("Updated notes.", messages)
+
+        self.assertEqual(len(adapter.sent_messages), 1)
+        self.assertIn('<atlas.skill_instructions name="repair-notes">', adapter.sent_messages[0])
+        self.assertIn("User task:\nsummarize latest changes", adapter.sent_messages[0])
 
 
 if __name__ == "__main__":

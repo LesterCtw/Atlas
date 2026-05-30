@@ -123,6 +123,27 @@ class SlashCommandTests(unittest.TestCase):
         self.assertIn('<atlas.skill_instructions name="repair-notes">', result.injected_message)
         self.assertIn("Summarize repair notes.", result.injected_message)
 
+    def test_skill_command_accepts_suffix_argument(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            skill_dir = workspace / ".atlas" / "skills" / "repair-notes"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "# Repair Notes\n\nSummarize repair notes.",
+                encoding="utf-8",
+            )
+            loader = SkillLoader(workspace=workspace)
+
+            result = handle_slash_command(
+                "/repair-notes summarize latest changes",
+                skill_loader=loader,
+            )
+
+        self.assertEqual(result.action, "inject-skill")
+        self.assertEqual(result.argument, "summarize latest changes")
+        self.assertIn("Loaded skill: repair-notes", result.message)
+        self.assertIsNotNone(result.injected_message)
+
     def test_unknown_skill_command_returns_clear_error_without_injection(self) -> None:
         with TemporaryDirectory() as directory:
             loader = SkillLoader(workspace=Path(directory))

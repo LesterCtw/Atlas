@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.widgets import Input, RichLog, Static
 
 from atlas.commands import handle_slash_command
@@ -61,10 +62,18 @@ BASE_SLASH_OPTIONS = ["/help", "/exit"]
 
 
 class PromptInput(Input):
+    BINDINGS = (
+        *Input.BINDINGS,
+        Binding("shift+enter", "insert_newline", show=False, priority=True),
+    )
+
     @property
     def _cursor_offset(self) -> int:
         # Keep terminal IME preedit text at the insertion point, not after Textual's soft cursor cell.
         return self._position_to_cell(self.cursor_position)
+
+    def action_insert_newline(self) -> None:
+        self.insert_text_at_cursor("\n")
 
 
 class AtlasApp(App[None]):
@@ -300,11 +309,34 @@ class AtlasApp(App[None]):
             self._render_slash_suggestions()
             return
 
-        self._slash_suggestions.update(self._available_slash_options(value))
+        options = self._available_slash_options(value)
+        if len(options) == 1 and options[0] == value:
+            self._slash_suggestions.clear()
+            self._render_slash_suggestions()
+            return
+
+        self._slash_suggestions.update(options)
         self._render_slash_suggestions()
 
     def _selected_slash_option(self) -> str | None:
         return self._slash_suggestions.selected()
+
+    def _single_slash_completion(self, value: str) -> str | None:
+        prompt = value.strip()
+        selected_command = self._selected_slash_option()
+        if (
+            prompt.startswith("/")
+            and selected_command is not None
+            and len(self._slash_suggestions.options) == 1
+            and prompt != selected_command
+        ):
+            return f"{selected_command} "
+        return None
+
+    def _complete_slash_prompt(self, prompt: Input, completion: str) -> None:
+        self._set_prompt_value(prompt, completion)
+        self._slash_suggestions.clear()
+        self._render_slash_suggestions()
 
     def _remember_prompt(self, prompt: str) -> None:
         self._prompt_history.remember(prompt)
@@ -330,6 +362,14 @@ class AtlasApp(App[None]):
             event.prevent_default()
             event.stop()
             return
+
+        if self.focused is prompt and event.key == "tab":
+            completion = self._single_slash_completion(prompt.value)
+            if completion is not None:
+                self._complete_slash_prompt(prompt, completion)
+                event.prevent_default()
+                event.stop()
+                return
 
         if self.focused is prompt and event.key == "shift+enter":
             prompt.insert_text_at_cursor("\n")
@@ -362,7 +402,46 @@ class AtlasApp(App[None]):
         self._prompt_history.handle_input_changed()
         self._update_slash_suggestions(event.value.strip())
 
+    async def _run_model_prompt(self, transcript_prompt: str, *, model_prompt: str | None = None) -> None:
+        self._write_transcript(self._format_user_prompt(transcript_prompt), group="user")
+        prompt_for_model = model_prompt or transcript_prompt
+        if self.tgenie_adapter is not None:
+            try:
+                result = await run_tgenie_tool_loop(
+                    initial_prompt=prompt_for_model,
+                    conversation=self.tgenie_adapter,
+                    tool_runtime=ToolRuntime(self.workspace),
+                )
+            except TgenieConversationError as error:
+                self._write_agent_output(f"Error: {error}")
+                return
+            self._write_status_events(result.status_events)
+            if result.error is not None:
+                self._write_agent_output(f"Error: {result.error.message}")
+            if result.final_response is not None:
+                self._write_agent_output(f"Atlas: {result.final_response}")
+            return
+
+        if self.fake_adapter is None:
+            return
+
+        result = run_fake_tool_loop(
+            initial_prompt=prompt_for_model,
+            adapter=self.fake_adapter,
+            tools={"echo": lambda args: {"text": args.get("text", "")}},
+        )
+        self._write_status_events(result.status_events)
+        if result.error is not None:
+            self._write_agent_output(f"Error: {result.error.message}")
+        if result.final_response is not None:
+            self._write_agent_output(f"Atlas: {result.final_response}")
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
+        completion = self._single_slash_completion(event.value)
+        if completion is not None:
+            self._complete_slash_prompt(event.input, completion)
+            return
+
         prompt = event.value.strip()
         selected_command = self._selected_slash_option()
         if prompt.startswith("/") and selected_command is not None:
@@ -444,6 +523,12 @@ class AtlasApp(App[None]):
                     self._write_agent_output(f"Atlas: {ingest_result.final_response}")
                 return
             if result.action == "inject-skill" and result.injected_message is not None:
+                if result.argument:
+                    await self._run_model_prompt(
+                        result.argument,
+                        model_prompt=f"{result.injected_message}\n\nUser task:\n{result.argument}",
+                    )
+                    return
                 if self.fake_adapter is not None:
                     self.fake_adapter.inject(result.injected_message)
             if result.action == "exit":
@@ -461,34 +546,4 @@ class AtlasApp(App[None]):
             await self._open_tgenie_login(prompt)
             return
 
-        self._write_transcript(self._format_user_prompt(prompt), group="user")
-        if self.tgenie_adapter is not None:
-            try:
-                result = await run_tgenie_tool_loop(
-                    initial_prompt=prompt,
-                    conversation=self.tgenie_adapter,
-                    tool_runtime=ToolRuntime(self.workspace),
-                )
-            except TgenieConversationError as error:
-                self._write_agent_output(f"Error: {error}")
-                return
-            self._write_status_events(result.status_events)
-            if result.error is not None:
-                self._write_agent_output(f"Error: {result.error.message}")
-            if result.final_response is not None:
-                self._write_agent_output(f"Atlas: {result.final_response}")
-            return
-
-        if self.fake_adapter is None:
-            return
-
-        result = run_fake_tool_loop(
-            initial_prompt=prompt,
-            adapter=self.fake_adapter,
-            tools={"echo": lambda args: {"text": args.get("text", "")}},
-        )
-        self._write_status_events(result.status_events)
-        if result.error is not None:
-            self._write_agent_output(f"Error: {result.error.message}")
-        if result.final_response is not None:
-            self._write_agent_output(f"Atlas: {result.final_response}")
+        await self._run_model_prompt(prompt)

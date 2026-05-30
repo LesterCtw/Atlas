@@ -59,7 +59,7 @@ def handle_slash_command(
         )
 
     if skill_loader is not None and command.startswith("/"):
-        skill_name = command.removeprefix("/")
+        skill_name, _, skill_argument = command.removeprefix("/").partition(" ")
         try:
             skill = skill_loader.load(skill_name)
         except SkillNotFound:
@@ -75,6 +75,7 @@ def handle_slash_command(
             action="inject-skill",
             message=message,
             injected_message=format_skill_instructions(skill),
+            argument=skill_argument.strip() or None,
         )
     return SlashCommandResult(
         action="message",
