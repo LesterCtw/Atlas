@@ -184,12 +184,13 @@ Input：
 Process：
 
 1. Atlas 把 prompt 送到目前的 tGenie conversation。
-2. tGenie 直接回答，或輸出 `atlas.tool_call` 要求本機工具。
-3. 如果有 tool call，Atlas 會解析 fenced JSON；如果 tGenie 網頁 UI 已經把 Markdown fence 渲染掉，Atlas 也會掃描完整 JSON object。
-4. Atlas 只在目前 workspace 內執行允許的工具。
-5. Atlas 把 `atlas.tool_result` 回貼給 tGenie。
-6. tGenie 根據工具結果產生 final answer。
-7. 如果同一回合要求太多次 tool call，Atlas 會停止該回合，避免無限循環。
+2. Bootstrap prompt 會要求 tGenie 把任務當成要完成的工作；在 final answer 前，先用安全且相關的 tool call 盡可能完成檔案檢查、搜尋、修改與測試。
+3. tGenie 直接回答，或輸出 `atlas.tool_call` 要求本機工具。
+4. 如果有 tool call，Atlas 會解析 fenced JSON；如果 tGenie 網頁 UI 已經把 Markdown fence 渲染掉，Atlas 也會掃描完整 JSON object。
+5. Atlas 只在目前 workspace 內執行允許的工具。
+6. Atlas 把 `atlas.tool_result` 回貼給 tGenie。
+7. tGenie 根據工具結果繼續下一個檢查，或在已完成、被工具錯誤阻擋、需要使用者決策時產生 final answer。
+8. 如果同一回合要求太多次 tool call，Atlas 會停止該回合，避免無限循環。
 
 Output：
 
@@ -200,7 +201,7 @@ Output：
 
 為什麼這樣做：tGenie 是網頁版 LLM，不一定支援 native function calling；文字型 tool-call protocol 可以先讓它參與本機工作流程。網頁 UI 可能把 Markdown code fence 渲染掉，所以 Atlas 不能只依賴反引號。
 
-影響與取捨：流程清楚、容易檢查，也比較能處理 nested `args`；取捨是一次只處理一個 tool call，速度比平行工具慢。Atlas 也會限制單回合 tool call 次數，避免模型卡在無限循環。
+影響與取捨：流程清楚、容易檢查，也比較能處理 nested `args`；bootstrap prompt 會鼓勵 tGenie 在回覆前多做合理檢查，但取捨是一次只處理一個 tool call，速度比平行工具慢。Atlas 也會限制單回合 tool call 次數，避免模型卡在無限循環。
 
 ### 2. Workspace 檔案工作
 
