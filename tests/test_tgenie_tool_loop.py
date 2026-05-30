@@ -51,6 +51,9 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
             result.status_events,
             ["waiting-for-model", "parsing-tool-call", "final-response"],
         )
+        self.assertEqual([event.kind for event in result.events], ["user_prompt", "assistant_final"])
+        self.assertEqual(result.events[0].message, "Answer directly.")
+        self.assertEqual(result.events[1].message, "No tools needed.")
         self.assertEqual(conversation.sent_messages, ["Answer directly."])
 
     async def test_real_tool_loop_executes_workspace_tool_and_returns_final_response(self) -> None:
@@ -91,6 +94,17 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"tool": "file.search"', conversation.sent_messages[1])
         self.assertIn('"path": "notes.md"', conversation.sent_messages[1])
         self.assertIn('"text": "needle here"', conversation.sent_messages[1])
+        self.assertEqual(
+            [event.kind for event in result.events],
+            ["user_prompt", "assistant_tool_call", "tool_result", "assistant_final"],
+        )
+        self.assertEqual(result.events[1].tool, "file.search")
+        self.assertEqual(result.events[1].args, {"query": "needle"})
+        self.assertEqual(result.events[2].tool, "file.search")
+        self.assertIsNotNone(result.events[2].result)
+        assert result.events[2].result is not None
+        self.assertTrue(result.events[2].result["ok"])
+        self.assertEqual(result.events[3].message, "The workspace note says: needle here.")
 
     async def test_real_tool_loop_accepts_plain_json_tool_call_with_nested_args(self) -> None:
         with TemporaryDirectory() as directory:
@@ -145,6 +159,12 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("atlas.tool_call_error", conversation.sent_messages[1])
         self.assertIn("malformed-json", conversation.sent_messages[1])
         self.assertIn("Send one corrected atlas.tool_call", conversation.sent_messages[1])
+        self.assertEqual(
+            [event.kind for event in result.events],
+            ["user_prompt", "tool_call_error", "assistant_final"],
+        )
+        self.assertEqual(result.events[1].error_code, "malformed-json")
+        self.assertEqual(result.events[2].message, "I corrected myself and can answer without a tool.")
 
     async def test_real_tool_loop_sends_retry_instruction_for_other_invalid_tool_calls(self) -> None:
         cases = {
@@ -219,6 +239,17 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.error.code, "tool-loop-limit")
         self.assertEqual(result.status_events[-1], "tool-loop-limit")
         self.assertEqual(len(conversation.sent_messages), 3)
+        self.assertEqual(
+            [event.kind for event in result.events],
+            [
+                "user_prompt",
+                "assistant_tool_call",
+                "tool_result",
+                "assistant_tool_call",
+                "tool_result",
+                "assistant_tool_call",
+            ],
+        )
 
     async def test_real_tool_loop_preserves_shell_confirmation_required_result(self) -> None:
         with TemporaryDirectory() as directory:

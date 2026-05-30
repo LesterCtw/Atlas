@@ -28,6 +28,14 @@ class FakeToolLoopTests(unittest.TestCase):
         self.assertIn("waiting-for-model", result.status_events)
         self.assertIn('"type": "atlas.tool_result"', adapter.sent_messages[1])
         self.assertIn('"text": "hello"', adapter.sent_messages[1])
+        self.assertEqual(
+            [event.kind for event in result.events],
+            ["user_prompt", "assistant_tool_call", "tool_result", "assistant_final"],
+        )
+        self.assertEqual(result.events[0].message, "say hello")
+        self.assertEqual(result.events[1].tool, "echo")
+        self.assertEqual(result.events[1].args, {"text": "hello"})
+        self.assertEqual(result.events[3].message, "Final answer: hello")
 
 
 if __name__ == "__main__":

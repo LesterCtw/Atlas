@@ -8,6 +8,7 @@ from atlas.fake_loop import format_tool_result
 from atlas.json_fences import format_json_fence
 from atlas.tool_protocol import ToolCallError, parse_tool_call
 from atlas.tool_catalog import ATTACH_TOOL_NAMES, SUPPORTED_TOOL_NAMES
+from atlas.tool_loop_events import ToolLoopEvent
 from atlas.tool_runtime import ToolResult, ToolRuntime, ToolRuntimeError
 
 
@@ -26,6 +27,7 @@ class TgenieToolConversation(Protocol):
 class TgenieToolLoopResult:
     final_response: str | None
     status_events: list[str]
+    events: tuple[ToolLoopEvent, ...] = ()
     error: ToolCallError | None = None
 
 
@@ -37,6 +39,7 @@ async def run_tgenie_tool_loop(
     max_tool_calls: int = 20,
 ) -> TgenieToolLoopResult:
     status_events = ["waiting-for-model"]
+    events: list[ToolLoopEvent] = [ToolLoopEvent(kind="user_prompt", message=initial_prompt)]
     model_response = await conversation.send_single_turn(initial_prompt)
     tool_call_count = 0
 
@@ -46,20 +49,42 @@ async def run_tgenie_tool_loop(
             parsed = parse_tool_call(model_response, available_tools=SUPPORTED_TOOL_NAMES)
         except ValueError:
             status_events.append("final-response")
-            return TgenieToolLoopResult(final_response=model_response, status_events=status_events)
+            events.append(ToolLoopEvent(kind="assistant_final", message=model_response))
+            return TgenieToolLoopResult(
+                final_response=model_response,
+                status_events=status_events,
+                events=tuple(events),
+            )
 
         if isinstance(parsed, ToolCallError):
+            events.append(
+                ToolLoopEvent(
+                    kind="tool_call_error",
+                    message=model_response,
+                    error_code=parsed.code,
+                    error_message=parsed.message,
+                )
+            )
             status_events.append("tool-call-error")
             status_events.append("sending-tool-error")
             status_events.append("waiting-for-model")
             model_response = await conversation.send_followup(format_tool_call_error(parsed))
             continue
 
+        events.append(
+            ToolLoopEvent(
+                kind="assistant_tool_call",
+                message=model_response,
+                tool=parsed.tool,
+                args=dict(parsed.args),
+            )
+        )
         if tool_call_count >= max_tool_calls:
             status_events.append("tool-loop-limit")
             return TgenieToolLoopResult(
                 final_response=None,
                 status_events=status_events,
+                events=tuple(events),
                 error=ToolCallError(
                     code="tool-loop-limit",
                     message="Atlas stopped because the model requested too many tool calls in one turn.",
@@ -82,7 +107,16 @@ async def run_tgenie_tool_loop(
             status_events.append("executing-tool")
             tool_result = tool_runtime.run(parsed.tool, parsed.args)
         status_events.append("sending-tool-result")
-        tool_result_message = format_tool_result(parsed, tool_result.to_dict())
+        tool_result_dict = tool_result.to_dict()
+        tool_result_message = format_tool_result(parsed, tool_result_dict)
+        events.append(
+            ToolLoopEvent(
+                kind="tool_result",
+                message=tool_result_message,
+                tool=parsed.tool,
+                result=dict(tool_result_dict),
+            )
+        )
         status_events.append("waiting-for-model")
         model_response = await conversation.send_followup(tool_result_message)
 
