@@ -22,6 +22,74 @@ class ToolProtocolTests(unittest.TestCase):
 
         self.assertEqual(result, ToolCall(tool="echo", args={"text": "hello"}))
 
+    def test_parses_plain_json_tool_call_after_markdown_rendering_removed_fence(self) -> None:
+        model_response = """I need to inspect the workspace.
+
+JSON
+{
+  "type": "atlas.tool_call",
+  "tool": "echo",
+  "args": {"text": "hello"}
+}
+"""
+
+        result = parse_tool_call(model_response)
+
+        self.assertEqual(result, ToolCall(tool="echo", args={"text": "hello"}))
+
+    def test_plain_json_tool_call_preserves_nested_args(self) -> None:
+        model_response = """JSON
+{
+  "type": "atlas.tool_call",
+  "tool": "file.write",
+  "args": {
+    "path": "notes.json",
+    "content": "{\\"nested\\": {\\"ok\\": true}}",
+    "metadata": {"source": {"id": "case-1"}}
+  }
+}
+"""
+
+        result = parse_tool_call(model_response)
+
+        self.assertEqual(
+            result,
+            ToolCall(
+                tool="file.write",
+                args={
+                    "path": "notes.json",
+                    "content": '{"nested": {"ok": true}}',
+                    "metadata": {"source": {"id": "case-1"}},
+                },
+            ),
+        )
+
+    def test_plain_malformed_tool_call_returns_retry_error(self) -> None:
+        model_response = """JSON
+{
+  "type": "atlas.tool_call",
+  "tool": "echo",
+  "args": {"text": "hello"
+"""
+
+        result = parse_tool_call(model_response)
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "malformed-json")
+
+    def test_plain_malformed_outer_tool_call_does_not_get_hidden_by_inner_args_object(self) -> None:
+        model_response = """JSON
+{
+  "type": "atlas.tool_call",
+  "tool": "echo",
+  "args": {"text": "hello"}
+"""
+
+        result = parse_tool_call(model_response)
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "malformed-json")
+
     def test_rejects_malformed_json_with_retry_message(self) -> None:
         model_response = """```json
 {
@@ -79,6 +147,21 @@ class ToolProtocolTests(unittest.TestCase):
         self.assertIsInstance(result, ToolCallError)
         self.assertEqual(result.code, "missing-tool")
         self.assertIn("tool", result.message)
+
+    def test_rejects_tool_name_that_is_not_a_string(self) -> None:
+        model_response = """```json
+{
+  "type": "atlas.tool_call",
+  "tool": 123,
+  "args": {}
+}
+```"""
+
+        result = parse_tool_call(model_response, available_tools={"echo"})
+
+        self.assertIsInstance(result, ToolCallError)
+        self.assertEqual(result.code, "invalid-tool")
+        self.assertIn("tool name", result.message)
 
     def test_rejects_args_that_are_not_an_object(self) -> None:
         model_response = """```json

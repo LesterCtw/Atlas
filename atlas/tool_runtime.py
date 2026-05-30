@@ -16,6 +16,10 @@ from atlas.workspace_paths import (
 
 ALLOWED_ATTACHMENT_SUFFIXES = frozenset({".pdf", ".jpg", ".jpeg", ".png"})
 ALLOWED_ATTACHMENT_SUFFIXES_TEXT = ".pdf, .jpg, .jpeg, or .png"
+DEFAULT_MAX_READ_BYTES = 1_000_000
+DEFAULT_MAX_SEARCH_FILE_BYTES = 1_000_000
+DEFAULT_MAX_SEARCH_MATCHES = 200
+DEFAULT_SHELL_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -44,8 +48,20 @@ PdfAttachment = FileAttachment
 
 
 class ToolRuntime:
-    def __init__(self, workspace: Path) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        max_read_bytes: int = DEFAULT_MAX_READ_BYTES,
+        max_search_file_bytes: int = DEFAULT_MAX_SEARCH_FILE_BYTES,
+        max_search_matches: int = DEFAULT_MAX_SEARCH_MATCHES,
+        shell_timeout_seconds: float = DEFAULT_SHELL_TIMEOUT_SECONDS,
+    ) -> None:
         self.workspace = workspace.resolve()
+        self.max_read_bytes = max_read_bytes
+        self.max_search_file_bytes = max_search_file_bytes
+        self.max_search_matches = max_search_matches
+        self.shell_timeout_seconds = shell_timeout_seconds
 
     def run(self, tool_name: str, args: dict[str, Any]) -> ToolResult:
         try:
@@ -72,6 +88,15 @@ class ToolRuntime:
             return ToolResult(ok=False, status="error", error="Path is a directory, not a text file.")
         except UnicodeDecodeError:
             return ToolResult(ok=False, status="error", error="File is not readable as UTF-8 text.")
+        except KeyError as error:
+            return ToolResult(ok=False, status="error", error=f"Missing tool argument: {error.args[0]}.")
+        except subprocess.TimeoutExpired as error:
+            return ToolResult(
+                ok=False,
+                status="timeout",
+                data={"command": str(error.cmd)},
+                error="Shell command timed out.",
+            )
         except OSError as error:
             return ToolResult(ok=False, status="error", error=f"File operation failed: {error}")
 
@@ -117,6 +142,8 @@ class ToolRuntime:
 
     def _read_file(self, args: dict[str, Any]) -> ToolResult:
         path = self._resolve_workspace_path(str(args["path"]))
+        if path.stat().st_size > self.max_read_bytes:
+            raise ToolRuntimeError(f"File is too large to read. Maximum size is {self.max_read_bytes} bytes.")
         return ToolResult(
             ok=True,
             status="ok",
@@ -139,6 +166,7 @@ class ToolRuntime:
         query = str(args["query"])
         root = self._resolve_workspace_path(str(args.get("path", ".")))
         matches = []
+        truncated = False
         for path in sorted(root.rglob("*")):
             if not path.is_file():
                 continue
@@ -152,6 +180,11 @@ class ToolRuntime:
                         "text": "",
                     }
                 )
+                if len(matches) >= self.max_search_matches:
+                    truncated = True
+                    break
+                continue
+            if path.stat().st_size > self.max_search_file_bytes:
                 continue
             try:
                 lines = path.read_text(encoding="utf-8").splitlines()
@@ -166,7 +199,12 @@ class ToolRuntime:
                             "text": line,
                         }
                     )
-        return ToolResult(ok=True, status="ok", data={"query": query, "matches": matches})
+                    if len(matches) >= self.max_search_matches:
+                        truncated = True
+                        break
+            if truncated:
+                break
+        return ToolResult(ok=True, status="ok", data={"query": query, "matches": matches, "truncated": truncated})
 
     def _run_shell(self, args: dict[str, Any]) -> ToolResult:
         command = str(args["command"])
@@ -193,6 +231,7 @@ class ToolRuntime:
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            timeout=self.shell_timeout_seconds,
         )
         return ToolResult(
             ok=True,
@@ -204,6 +243,5 @@ class ToolRuntime:
                 "exit_code": completed.returncode,
             },
         )
-
 class ToolRuntimeError(Exception):
     pass

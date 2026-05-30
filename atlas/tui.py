@@ -19,11 +19,14 @@ from atlas.tgenie_adapter import (
     TgenieConversationAdapter,
     TgenieConversationClient,
     TgenieConversationError,
+    check_tgenie_chat_readiness,
+    format_tgenie_readiness_issue,
 )
 from atlas.tgenie_setup import AtlasConfigStore, TgenieBrowserLaunchError, TgenieBrowserLauncher
 from atlas.tgenie_tool_loop import run_tgenie_tool_loop
 from atlas.tool_runtime import ToolRuntime
 from atlas.workspace_paths import WorkspacePathError, resolve_workspace_path, workspace_relative_path
+from atlas.workflow_commands import workflow_slash_options
 
 
 STATUS_MESSAGES = {
@@ -51,6 +54,7 @@ STATUS_MESSAGES = {
     "final-response": "Working: Final response",
     "tool-call-error": "Working: Tool call error",
     "sending-tool-error": "Working: Sending tool error",
+    "tool-loop-limit": "Working: Tool loop limit reached",
     "error": "Working: Tool call error",
 }
 BASE_SLASH_OPTIONS = ["/help", "/exit"]
@@ -138,6 +142,7 @@ class AtlasApp(App[None]):
         self._tgenie_login_session: object | None = None
         self._awaiting_tgenie_url = False
         self._awaiting_tgenie_login = False
+        self._last_tgenie_readiness_issue: str | None = None
         self._pending_fa_stem_folder: Path | None = None
         self._slash_suggestions = SlashSuggestionState()
         self._transcript_group: str | None = None
@@ -176,7 +181,7 @@ class AtlasApp(App[None]):
     def _write_status_events(self, status_events: Iterable[str]) -> None:
         for status_event in status_events:
             status_message = STATUS_MESSAGES.get(status_event, f"Status: {status_event}")
-            self._write_transcript(status_message)
+            self._write_agent_output(status_message)
 
     def _format_user_prompt(self, prompt: str) -> Text:
         return Text.assemble(
@@ -201,6 +206,12 @@ class AtlasApp(App[None]):
         self._write_agent_output("Atlas: Ready.")
         await self._start_tgenie_setup_if_needed()
         self.query_one("#prompt", Input).focus()
+        self.call_after_refresh(self._sync_prompt_cursor_position)
+
+    def _sync_prompt_cursor_position(self) -> None:
+        prompt = self.query_one("#prompt", Input)
+        if self.focused is prompt:
+            self.cursor_position = prompt.cursor_screen_offset
 
     async def _start_tgenie_setup_if_needed(self) -> None:
         if self.tgenie_config_store is None:
@@ -225,6 +236,8 @@ class AtlasApp(App[None]):
         except TgenieBrowserLaunchError as error:
             self._write_agent_output(f"Error: {error}")
             return
+        if await self._complete_tgenie_login_if_ready():
+            return
         self._awaiting_tgenie_login = True
         self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done.")
 
@@ -235,9 +248,25 @@ class AtlasApp(App[None]):
         if page is not None:
             self.tgenie_adapter = TgenieConversationAdapter(page=page)
 
+    async def _complete_tgenie_login_if_ready(self) -> bool:
+        if self._tgenie_login_session is None:
+            return False
+        page = getattr(self._tgenie_login_session, "page", None)
+        if page is None:
+            return False
+        readiness = await check_tgenie_chat_readiness(page)
+        if not readiness.ready:
+            self._last_tgenie_readiness_issue = format_tgenie_readiness_issue(readiness)
+            return False
+        self._last_tgenie_readiness_issue = None
+        self._awaiting_tgenie_login = False
+        self._prepare_tgenie_adapter()
+        self._write_agent_output("Atlas: tGenie is ready. You can continue in Atlas.")
+        return True
+
     def _available_slash_options(self, value: str = "/") -> list[str]:
         skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
-        options = [*BASE_SLASH_OPTIONS, *skill_options, "/fa-stem brief"]
+        options = [*BASE_SLASH_OPTIONS, *skill_options, *workflow_slash_options()]
         if self._awaiting_tgenie_login:
             options.append("/login-done")
         if value == "/":
@@ -353,8 +382,11 @@ class AtlasApp(App[None]):
             return
 
         if self._awaiting_tgenie_login:
-            self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done before sending prompts.")
-            return
+            if not await self._complete_tgenie_login_if_ready():
+                self._write_agent_output("Atlas: Complete login in Chrome, then type /login-done before sending prompts.")
+                if self._last_tgenie_readiness_issue is not None:
+                    self._write_agent_output(f"Atlas: {self._last_tgenie_readiness_issue}")
+                return
 
         if self._pending_fa_stem_folder is not None:
             case_folder = self._pending_fa_stem_folder

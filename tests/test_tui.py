@@ -24,6 +24,45 @@ class RecordingLoginBrowserLauncher:
         return object()
 
 
+class ReadyLocator:
+    def __init__(self, page: ReadyTgeniePage, selector: str) -> None:
+        self.page = page
+        self.selector = selector
+
+    @property
+    def first(self) -> ReadyLocator:
+        return self
+
+    async def wait_for(self, *, state: str, timeout: int) -> None:
+        self.page.waits.append((self.selector, state, timeout))
+        if self.selector not in self.page.ready_selectors:
+            raise TimeoutError(f"Missing selector: {self.selector}")
+
+
+class ReadyTgeniePage:
+    def __init__(self, ready_selectors: set[str]) -> None:
+        self.ready_selectors = ready_selectors
+        self.waits: list[tuple[str, str, int]] = []
+
+    def locator(self, selector: str) -> ReadyLocator:
+        return ReadyLocator(self, selector)
+
+
+class ReadyLoginBrowserSession:
+    def __init__(self, page: ReadyTgeniePage) -> None:
+        self.page = page
+
+
+class ReadyLoginBrowserLauncher:
+    def __init__(self, page: ReadyTgeniePage) -> None:
+        self.page = page
+        self.calls: list[tuple[str, Path]] = []
+
+    async def open_login_browser(self, url: str, profile_dir: Path) -> ReadyLoginBrowserSession:
+        self.calls.append((url, profile_dir))
+        return ReadyLoginBrowserSession(self.page)
+
+
 class FailingLoginBrowserLauncher:
     async def open_login_browser(self, url: str, profile_dir: Path) -> object:
         raise TgenieBrowserLaunchError("Could not open system Chrome. Install Google Chrome.")
@@ -225,6 +264,34 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("Atlas: Complete login in Chrome, then type /login-done.", messages)
 
                 self.assertEqual(launcher.calls, [("https://tgenie.example.test", store.chrome_profile_dir)])
+
+    async def test_saved_tgenie_url_auto_confirms_login_when_chat_ui_is_ready(self) -> None:
+        from atlas.tgenie_adapter import SEND_SELECTOR, TEXTAREA_SELECTOR
+
+        with TemporaryDirectory() as workspace_directory:
+            with TemporaryDirectory() as config_directory:
+                store = AtlasConfigStore(config_dir=Path(config_directory))
+                store.save_tgenie_url("https://tgenie.example.test")
+                page = ReadyTgeniePage({TEXTAREA_SELECTOR, SEND_SELECTOR})
+                launcher = ReadyLoginBrowserLauncher(page)
+                app = AtlasApp(
+                    workspace=Path(workspace_directory).resolve(),
+                    tgenie_config_store=store,
+                    tgenie_browser_launcher=launcher,
+                )
+
+                async with app.run_test() as pilot:
+                    await pilot.pause()
+
+                    messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                    self.assertIn("Atlas: tGenie is ready. You can continue in Atlas.", messages)
+                    self.assertNotIn("type /login-done", messages)
+                    self.assertIsNotNone(pilot.app.tgenie_adapter)
+
+                self.assertEqual(
+                    [selector for selector, _state, _timeout in page.waits],
+                    [TEXTAREA_SELECTOR, SEND_SELECTOR],
+                )
 
     async def test_tgenie_browser_launch_error_is_shown_in_tui(self) -> None:
         with TemporaryDirectory() as workspace_directory:
@@ -719,6 +786,18 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertTrue(cursor_style.underline)
 
+    async def test_prompt_terminal_cursor_starts_at_input_origin_for_ime_preview(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                await pilot.pause()
+
+                prompt = pilot.app.query_one("#prompt", Input)
+
+                self.assertEqual(prompt.cursor_screen_offset.x, prompt.content_region.x)
+                self.assertEqual(pilot.app.cursor_position, prompt.cursor_screen_offset)
+
     async def test_prompt_cursor_offset_stays_at_text_end_for_cjk_ime(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
@@ -997,6 +1076,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(suggestions.has_class("hidden"))
                 self.assertIn("/help", suggestion_text)
                 self.assertIn("/llm-wiki", suggestion_text)
+                self.assertIn("/llm-wiki ingest", suggestion_text)
                 self.assertIn("/skill-creator", suggestion_text)
                 selected_marker_style = suggestions.render().spans[0].style
                 self.assertEqual(selected_marker_style.foreground.rgb, (0, 153, 255))
@@ -1047,6 +1127,39 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Working: Executing tool", messages)
                 self.assertIn("Working: Final response", messages)
                 self.assertIn("Final answer: hello", messages)
+
+    async def test_tool_loop_status_renders_as_atlas_output_after_user_prompt(self) -> None:
+        adapter = FakeTgenieAdapter(
+            responses=[
+                """```json
+{"type": "atlas.tool_call", "tool": "echo", "args": {"text": "hello"}}
+```""",
+                "Final answer: hello",
+            ]
+        )
+
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(
+                workspace=Path(directory).resolve(),
+                fake_adapter=adapter,
+            )
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "say hello"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                lines = messages.splitlines()
+                user_index = next(index for index, line in enumerate(lines) if "› You  say hello" in line)
+                working_index = next(
+                    index for index, line in enumerate(lines) if line == "Working: Waiting for model"
+                )
+
+                self.assertTrue(
+                    any(is_horizontal_rule(line) for line in lines[user_index + 1 : working_index])
+                )
 
     async def test_fake_tool_loop_does_not_render_footer_status(self) -> None:
         adapter = FakeTgenieAdapter(

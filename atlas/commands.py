@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from atlas.skills import Skill, SkillLoader, SkillNotFound
+from atlas.workflow_commands import find_workflow_command, workflow_command_help
 from atlas.wiki import initialize_wiki
 
 
 BUILTIN_COMMANDS_MESSAGE = (
     "Available commands: /help for help, /exit to quit Atlas, "
-    "/fa-stem brief <workspace-relative-folder> for folder-level FA STEM first-pass triage."
+    f"{workflow_command_help()}."
 )
 
 
@@ -37,35 +38,26 @@ def handle_slash_command(
         )
     if command == "/exit":
         return SlashCommandResult(action="exit", message="Exiting Atlas.")
-    if command == "/fa-stem brief":
-        return SlashCommandResult(
-            action="message",
-            message="Usage: /fa-stem brief <workspace-relative-folder>",
-        )
-    if command.startswith("/fa-stem brief "):
-        argument = command.removeprefix("/fa-stem brief ").strip()
+
+    workflow_command = find_workflow_command(command)
+    if workflow_command is not None:
+        if command == workflow_command.prefix:
+            return SlashCommandResult(
+                action="message",
+                message=f"Usage: {workflow_command.usage}",
+            )
+        argument = command.removeprefix(workflow_command.prefix).strip()
         if not argument:
             return SlashCommandResult(
                 action="message",
-                message="Usage: /fa-stem brief <workspace-relative-folder>",
+                message=f"Usage: {workflow_command.usage}",
             )
         return SlashCommandResult(
-            action="fa-stem-brief",
-            message=f"Starting FA STEM brief: {argument}",
+            action=workflow_command.action,
+            message=f"Starting {workflow_command.label}: {argument}",
             argument=argument,
         )
-    if command.startswith("/llm-wiki ingest "):
-        argument = command.removeprefix("/llm-wiki ingest ").strip()
-        if not argument:
-            return SlashCommandResult(
-                action="message",
-                message="Usage: /llm-wiki ingest <workspace-pdf-or-directory>",
-            )
-        return SlashCommandResult(
-            action="llm-wiki-ingest",
-            message=f"Starting LLM Wiki ingestion: {argument}",
-            argument=argument,
-        )
+
     if skill_loader is not None and command.startswith("/"):
         skill_name = command.removeprefix("/")
         try:

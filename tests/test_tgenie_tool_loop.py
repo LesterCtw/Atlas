@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -91,6 +92,34 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"path": "notes.md"', conversation.sent_messages[1])
         self.assertIn('"text": "needle here"', conversation.sent_messages[1])
 
+    async def test_real_tool_loop_accepts_plain_json_tool_call_with_nested_args(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            tool_call = {
+                "type": "atlas.tool_call",
+                "tool": "file.write",
+                "args": {
+                    "path": "notes.json",
+                    "content": '{"nested": {"ok": true}}',
+                },
+            }
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    "JSON\n" + json.dumps(tool_call, ensure_ascii=False, indent=2),
+                    "The file is written.",
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Write nested JSON.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+            )
+
+            self.assertEqual(result.final_response, "The file is written.")
+            self.assertEqual((workspace / "notes.json").read_text(encoding="utf-8"), '{"nested": {"ok": true}}')
+            self.assertIn('"status": "ok"', conversation.sent_messages[1])
+
     async def test_real_tool_loop_sends_retry_instruction_for_malformed_tool_call(self) -> None:
         with TemporaryDirectory() as directory:
             workspace = Path(directory)
@@ -162,6 +191,34 @@ class TgenieToolLoopTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("atlas.tool_call_error", conversation.sent_messages[1])
                 self.assertIn(expected_code, conversation.sent_messages[1])
                 self.assertIn("Send one corrected atlas.tool_call", conversation.sent_messages[1])
+
+    async def test_real_tool_loop_stops_after_max_tool_calls(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            repeated_tool_call = """```json
+{"type": "atlas.tool_call", "tool": "file.list", "args": {"path": "."}}
+```"""
+            conversation = FakeAsyncTgenieConversation(
+                responses=[
+                    repeated_tool_call,
+                    repeated_tool_call,
+                    repeated_tool_call,
+                ]
+            )
+
+            result = await run_tgenie_tool_loop(
+                initial_prompt="Loop forever.",
+                conversation=conversation,
+                tool_runtime=ToolRuntime(workspace),
+                max_tool_calls=2,
+            )
+
+        self.assertIsNone(result.final_response)
+        self.assertIsNotNone(result.error)
+        assert result.error is not None
+        self.assertEqual(result.error.code, "tool-loop-limit")
+        self.assertEqual(result.status_events[-1], "tool-loop-limit")
+        self.assertEqual(len(conversation.sent_messages), 3)
 
     async def test_real_tool_loop_preserves_shell_confirmation_required_result(self) -> None:
         with TemporaryDirectory() as directory:

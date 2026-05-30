@@ -98,6 +98,28 @@ class ToolRuntimeTests(unittest.TestCase):
         self.assertEqual(result.status, "error")
         self.assertIn("not found", result.error or "")
 
+    def test_file_read_rejects_files_over_size_limit(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "large.txt").write_text("123456", encoding="utf-8")
+            runtime = ToolRuntime(workspace=workspace, max_read_bytes=5)
+
+            result = runtime.run("file.read", {"path": "large.txt"})
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "error")
+        self.assertIn("too large", result.error or "")
+
+    def test_tool_runtime_reports_missing_required_argument_as_tool_result(self) -> None:
+        with TemporaryDirectory() as directory:
+            runtime = ToolRuntime(workspace=Path(directory))
+
+            result = runtime.run("file.read", {})
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, "error")
+        self.assertIn("Missing tool argument: path", result.error or "")
+
     def test_rejects_symlink_escape_for_file_read(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -128,6 +150,19 @@ class ToolRuntimeTests(unittest.TestCase):
 
         self.assertTrue(result.ok, result.error)
         self.assertEqual(result.data["matches"], [])
+
+    def test_search_caps_number_of_matches(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "a.txt").write_text("needle\nneedle\n", encoding="utf-8")
+            (workspace / "b.txt").write_text("needle\n", encoding="utf-8")
+            runtime = ToolRuntime(workspace=workspace, max_search_matches=2)
+
+            result = runtime.run("file.search", {"query": "needle"})
+
+        self.assertTrue(result.ok, result.error)
+        self.assertEqual(len(result.data["matches"]), 2)
+        self.assertTrue(result.data["truncated"])
 
     def test_prepare_file_attachment_accepts_pdf_and_images(self) -> None:
         with TemporaryDirectory() as directory:

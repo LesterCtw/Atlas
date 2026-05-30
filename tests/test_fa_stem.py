@@ -108,9 +108,28 @@ class FaStemBriefTests(unittest.TestCase):
         self.assertEqual(circle.reason, "Void-like contrast near the via edge.")
         self.assertEqual(circle.confidence, "medium")
 
+    def test_parse_plain_json_circle_response_after_markdown_rendering_removed_fence(self) -> None:
+        circle = parse_fa_stem_circle(
+            """The suggested mark is:
+
+JSON
+{
+  "center_x_percent": 25,
+  "center_y_percent": 40,
+  "radius_percent": 12,
+  "reason": "Void-like contrast near the via edge.",
+  "confidence": "medium"
+}
+"""
+        )
+
+        self.assertEqual(circle.center_x_percent, 25.0)
+        self.assertEqual(circle.center_y_percent, 40.0)
+        self.assertEqual(circle.radius_percent, 12.0)
+
     def test_parse_rejects_malformed_or_incomplete_json(self) -> None:
         cases = {
-            "missing-fence": ("{}", "fenced JSON"),
+            "missing-json": ("No JSON here.", "JSON"),
             "malformed-json": ("```json\n{\"center_x_percent\": 25\n```", "malformed JSON"),
             "missing-field": (
                 """```json

@@ -13,7 +13,7 @@ from atlas.json_fences import (
     JsonFencePayloadError,
     MalformedJsonFenceError,
     MissingJsonFenceError,
-    parse_first_json_fence_object,
+    parse_first_json_object,
 )
 
 
@@ -22,7 +22,7 @@ def parse_photo_bundle_candidate_evidence(
     *,
     bundle: PhotoBundle,
 ) -> tuple[AttachmentEvidence, ...]:
-    payload = _parse_fenced_json_object(model_response)
+    payload = _parse_model_json_object(model_response)
     candidates = payload.get("candidate_observations")
     if not isinstance(candidates, list):
         raise FaStemBriefError("tGenie JSON response is missing candidate_observations.")
@@ -54,7 +54,7 @@ def parse_candidate_review_result(
     *,
     source_id: str,
 ) -> FaStemCandidateReviewResult:
-    payload = _parse_fenced_json_object(model_response)
+    payload = _parse_model_json_object(model_response)
     review = payload.get("candidate_review")
     if not isinstance(review, dict):
         raise FaStemBriefError("tGenie JSON response is missing candidate_review.")
@@ -89,7 +89,7 @@ def parse_candidate_review_result(
 
 
 def parse_final_ranking(model_response: str) -> FaStemFinalRanking:
-    payload = _parse_fenced_json_object(model_response)
+    payload = _parse_model_json_object(model_response)
     primary_payload = payload.get("primary_suspect")
     if not isinstance(primary_payload, dict):
         raise FaStemBriefError("tGenie JSON response is missing primary_suspect.")
@@ -116,7 +116,7 @@ def parse_final_ranking(model_response: str) -> FaStemFinalRanking:
 
 
 def parse_fa_stem_circle(model_response: str) -> FaStemCircle:
-    payload = _parse_fenced_json_object(model_response)
+    payload = _parse_model_json_object(model_response)
     missing_fields = [
         field
         for field in (
@@ -204,11 +204,11 @@ def _parse_final_finding(
     )
 
 
-def _parse_fenced_json_object(model_response: str) -> dict[str, object]:
+def _parse_model_json_object(model_response: str) -> dict[str, object]:
     try:
-        return parse_first_json_fence_object(model_response)
+        return parse_first_json_object(model_response)
     except MissingJsonFenceError as error:
-        raise FaStemBriefError("tGenie response did not include a fenced JSON block.") from error
+        raise FaStemBriefError("tGenie response did not include a JSON object.") from error
     except MalformedJsonFenceError as error:
         raise FaStemBriefError("tGenie response included malformed JSON.") from error
     except JsonFencePayloadError as error:

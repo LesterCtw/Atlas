@@ -15,7 +15,7 @@ Atlas v1 提供：
 - `atlas` terminal TUI。
 - 首次 tGenie URL 設定。
 - 使用系統 Chrome 開啟 tGenie。
-- 手動登入與 Chrome profile 重用。
+- 手動登入、登入狀態自動偵測與 Chrome profile 重用。
 - 單一 workspace 邊界。
 - tGenie 對話與 tool loop。
 - workspace file tools：`file.list`、`file.read`、`file.search`、`file.write`。
@@ -31,7 +31,7 @@ Atlas v1 提供：
 - Atlas v1 以 Windows 11 + Python 3.12 為主要部署環境。
 - 公司電腦部署不需要 `uv`。
 - Atlas 使用系統已安裝的 Google Chrome，不使用 Playwright 下載的瀏覽器。
-- tGenie 登入必須由使用者在 Chrome 裡手動完成。
+- tGenie 登入必須由使用者在 Chrome 裡手動完成；如果 Atlas 偵測到 tGenie chat 輸入框與送出按鈕已出現，會自動進入可用狀態。
 - Atlas 不會要求、儲存或處理密碼、SSO token 或公司憑證。
 - v1 只支援單一 workspace、單一 tGenie conversation。
 - v1 的附件工具只支援 workspace 內的 `.pdf`、`.jpg`、`.jpeg`、`.png`。
@@ -122,7 +122,8 @@ uv run --with pytest pytest
 3. Atlas 會把 tGenie URL 儲存在使用者全域設定，不放在 workspace。
 4. Atlas 會開啟系統 Chrome，並使用固定 Chrome profile。
 5. 你在 Chrome 裡手動完成 tGenie 登入。
-6. 回到 Atlas TUI，輸入：
+6. 如果 Atlas 偵測到 tGenie chat UI 已可用，會顯示 `Atlas: tGenie is ready. You can continue in Atlas.`，不需要再輸入確認指令。
+7. 如果 Atlas 還沒有偵測到 chat UI，回到 Atlas TUI，輸入：
 
 ```text
 /login-done
@@ -184,21 +185,22 @@ Process：
 
 1. Atlas 把 prompt 送到目前的 tGenie conversation。
 2. tGenie 直接回答，或輸出 `atlas.tool_call` 要求本機工具。
-3. 如果有 tool call，Atlas 會解析 JSON。
+3. 如果有 tool call，Atlas 會解析 fenced JSON；如果 tGenie 網頁 UI 已經把 Markdown fence 渲染掉，Atlas 也會掃描完整 JSON object。
 4. Atlas 只在目前 workspace 內執行允許的工具。
 5. Atlas 把 `atlas.tool_result` 回貼給 tGenie。
 6. tGenie 根據工具結果產生 final answer。
+7. 如果同一回合要求太多次 tool call，Atlas 會停止該回合，避免無限循環。
 
 Output：
 
 - Atlas TUI transcript 顯示 `Working:` 狀態與最後 `Atlas:` 回覆。
 - 如果 tGenie 使用 `file.write`，workspace 內會產生或更新檔案。
 
-這個做法是什麼：Atlas 把 tGenie 當成主要推理模型，本機工具由 Atlas 代為執行。
+這個做法是什麼：Atlas 把 tGenie 當成主要推理模型，本機工具由 Atlas 代為執行；tool call 解析會依 JSON 結構判斷完整物件，不用 regex 去切 `{...}`。
 
-為什麼這樣做：tGenie 是網頁版 LLM，不一定支援 native function calling；文字型 tool-call protocol 可以先讓它參與本機工作流程。
+為什麼這樣做：tGenie 是網頁版 LLM，不一定支援 native function calling；文字型 tool-call protocol 可以先讓它參與本機工作流程。網頁 UI 可能把 Markdown code fence 渲染掉，所以 Atlas 不能只依賴反引號。
 
-影響與取捨：流程清楚、容易檢查；取捨是一次只處理一個 tool call，速度比平行工具慢。
+影響與取捨：流程清楚、容易檢查，也比較能處理 nested `args`；取捨是一次只處理一個 tool call，速度比平行工具慢。Atlas 也會限制單回合 tool call 次數，避免模型卡在無限循環。
 
 ### 2. Workspace 檔案工作
 
@@ -292,7 +294,7 @@ Process：
 4. Atlas 用固定排序把影像每 9 張組成一個 3x3 Photo Bundle，最後不足 9 張也會形成 partial bundle。
 5. 每個 tile 會有 A1 到 C3 的 label，並保留 tile-to-source mapping 回原始影像 path。
 6. Atlas 將每個 Photo Bundle attach 給 tGenie。
-7. tGenie 依照 FA STEM prompt 回傳 fenced JSON `candidate_observations`，包含 `tile_label`、`observation`、`inference`、`uncertainty`、`confidence` 與 optional `coordinates`。
+7. tGenie 依照 FA STEM prompt 回傳 JSON `candidate_observations`，包含 `tile_label`、`observation`、`inference`、`uncertainty`、`confidence` 與 optional `coordinates`。如果網頁 UI 把 fenced JSON 渲染成 plain JSON，Atlas 仍會用 shared JSON parser 解析。
 8. Atlas 從 saved first-pass evidence 選出最多 10 張 candidate 原始影像。
 9. Atlas 重新 attach 每張候選原圖，執行 second-pass original-image review。
 10. second-pass review 會要求 tGenie 回傳百分比圈選座標、reason、confidence、uncertainty，並標示 `primary-suspect-relevant` 或 `profile-only`。
@@ -397,10 +399,11 @@ Workspace-local skill 位置：
 
 - Atlas 啟動時只綁定一個 workspace。
 - `file.list`、`file.read`、`file.search`、`file.write` 都只能操作 workspace 內 path。
+- `file.read` 和 `file.search` 有預設大小與結果數量上限，避免模型一次讀取或搜尋過多資料。
 - `file.attach` 只接受 workspace 內 `.pdf`、`.jpg`、`.jpeg`、`.png`。
 - `pdf.attach` 保留給舊流程，只接受 workspace 內 `.pdf`。
 - absolute path、`..` escape、指向 workspace 外的 path 會被拒絕。
-- `shell.run` 預設保守。大部分 command 會回傳 `confirmation-required`，高風險 command 會回傳 `rejected`。
+- `shell.run` 預設保守。大部分 command 會回傳 `confirmation-required`，高風險 command 會回傳 `rejected`，允許執行的 command 也有 timeout。
 
 ## 常見問題
 
@@ -420,7 +423,9 @@ Workspace-local skill 位置：
 
 ### Atlas 一直要求 `/login-done`
 
-先在 Chrome 裡完成 tGenie 登入，再回到 Atlas TUI 輸入 `/login-done`。
+先在 Chrome 裡完成 tGenie 登入。若 tGenie chat 輸入框與送出按鈕已出現，Atlas 通常會自動偵測並顯示可以繼續使用。
+
+如果公司網路或 tGenie UI 載入較慢，Atlas 可能還沒偵測到；這時再回到 Atlas TUI 輸入 `/login-done`。
 
 ### 附件上傳失敗
 

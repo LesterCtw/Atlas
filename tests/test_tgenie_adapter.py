@@ -14,6 +14,8 @@ from atlas.tgenie_adapter import (
     TEXTAREA_SELECTOR,
     TgenieConversationAdapter,
     build_atlas_bootstrap_prompt,
+    check_tgenie_chat_readiness,
+    format_tgenie_readiness_issue,
 )
 
 
@@ -164,6 +166,24 @@ class TgenieAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("FA STEM", prompt)
         self.assertNotIn("one attachment per turn", prompt)
         self.assertNotIn("attachment lifetime", prompt)
+
+    async def test_readiness_check_reports_missing_selector(self) -> None:
+        page = FakePage()
+        page.locators[SEND_SELECTOR].visible = False
+
+        result = await check_tgenie_chat_readiness(page, timeout_ms=1)
+
+        self.assertFalse(result.ready)
+        self.assertEqual(result.missing_selector, SEND_SELECTOR)
+        self.assertIn(SEND_SELECTOR, format_tgenie_readiness_issue(result))
+
+    async def test_readiness_check_passes_when_chat_controls_are_visible(self) -> None:
+        page = FakePage()
+
+        result = await check_tgenie_chat_readiness(page, timeout_ms=1)
+
+        self.assertTrue(result.ready)
+        self.assertEqual(format_tgenie_readiness_issue(result), "tGenie chat UI is ready.")
 
     async def test_adapter_sends_prompt_in_current_conversation_by_default(self) -> None:
         page = FakePage(new_conversation_visible=False, stop_visible=False)

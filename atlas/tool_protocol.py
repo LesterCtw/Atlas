@@ -7,6 +7,7 @@ from typing import Any
 from atlas.json_fences import (
     MalformedJsonFenceError,
     find_json_fence_contents,
+    find_json_object_contents,
     load_json_fence_content,
 )
 
@@ -31,8 +32,11 @@ def parse_tool_call(
     available_tools: Collection[str] | None = None,
 ) -> ToolCall | ToolCallError:
     tool_payloads: list[dict[str, Any]] = []
+    raw_json_contents = find_json_fence_contents(model_response)
+    if not raw_json_contents:
+        raw_json_contents = find_json_object_contents(model_response)
 
-    for raw_json in find_json_fence_contents(model_response):
+    for raw_json in raw_json_contents:
         try:
             payload = load_json_fence_content(raw_json)
         except MalformedJsonFenceError:
@@ -42,6 +46,12 @@ def parse_tool_call(
             )
         if isinstance(payload, dict) and payload.get("type") == TOOL_CALL_TYPE:
             tool_payloads.append(payload)
+
+    if not tool_payloads and TOOL_CALL_TYPE in model_response and "{" in model_response:
+        return ToolCallError(
+            code="malformed-json",
+            message="Tool call JSON is invalid. Send one valid JSON Atlas tool call.",
+        )
 
     if len(tool_payloads) > 1:
         return ToolCallError(
@@ -57,6 +67,11 @@ def parse_tool_call(
                 message="Tool call is missing a tool name. Send a complete tool call.",
             )
         tool = payload["tool"]
+        if not isinstance(tool, str) or not tool.strip():
+            return ToolCallError(
+                code="invalid-tool",
+                message="Tool call tool name must be a non-empty string.",
+            )
         if available_tools is not None and tool not in available_tools:
             return ToolCallError(
                 code="unknown-tool",

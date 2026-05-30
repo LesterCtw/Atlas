@@ -7,19 +7,8 @@ from typing import Any, Protocol
 from atlas.fake_loop import format_tool_result
 from atlas.json_fences import format_json_fence
 from atlas.tool_protocol import ToolCallError, parse_tool_call
+from atlas.tool_catalog import ATTACH_TOOL_NAMES, SUPPORTED_TOOL_NAMES
 from atlas.tool_runtime import ToolResult, ToolRuntime, ToolRuntimeError
-
-
-SUPPORTED_TOOLS = {
-    "file.attach",
-    "file.list",
-    "file.read",
-    "file.search",
-    "file.write",
-    "pdf.attach",
-    "shell.run",
-}
-ATTACH_TOOLS = {"file.attach", "pdf.attach"}
 
 
 class TgenieToolConversation(Protocol):
@@ -45,14 +34,16 @@ async def run_tgenie_tool_loop(
     initial_prompt: str,
     conversation: TgenieToolConversation,
     tool_runtime: ToolRuntime,
+    max_tool_calls: int = 20,
 ) -> TgenieToolLoopResult:
     status_events = ["waiting-for-model"]
     model_response = await conversation.send_single_turn(initial_prompt)
+    tool_call_count = 0
 
     while True:
         status_events.append("parsing-tool-call")
         try:
-            parsed = parse_tool_call(model_response, available_tools=SUPPORTED_TOOLS)
+            parsed = parse_tool_call(model_response, available_tools=SUPPORTED_TOOL_NAMES)
         except ValueError:
             status_events.append("final-response")
             return TgenieToolLoopResult(final_response=model_response, status_events=status_events)
@@ -64,7 +55,19 @@ async def run_tgenie_tool_loop(
             model_response = await conversation.send_followup(format_tool_call_error(parsed))
             continue
 
-        if parsed.tool in ATTACH_TOOLS:
+        if tool_call_count >= max_tool_calls:
+            status_events.append("tool-loop-limit")
+            return TgenieToolLoopResult(
+                final_response=None,
+                status_events=status_events,
+                error=ToolCallError(
+                    code="tool-loop-limit",
+                    message="Atlas stopped because the model requested too many tool calls in one turn.",
+                ),
+            )
+        tool_call_count += 1
+
+        if parsed.tool in ATTACH_TOOL_NAMES:
             status_events.append(
                 "uploading-pdf" if parsed.tool == "pdf.attach" else "uploading-attachment"
             )

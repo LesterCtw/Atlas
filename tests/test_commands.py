@@ -16,6 +16,7 @@ class SlashCommandTests(unittest.TestCase):
         self.assertIn("/help", result.message)
         self.assertIn("/exit", result.message)
         self.assertIn("/fa-stem brief", result.message)
+        self.assertIn("/llm-wiki ingest", result.message)
         self.assertIn("folder-level", result.message)
 
     def test_help_with_skill_loader_lists_skill_commands(self) -> None:

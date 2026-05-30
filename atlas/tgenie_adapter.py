@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+from atlas.tool_catalog import format_tool_names
 
 
 TEXTAREA_SELECTOR = 'textarea[name="chat-input-textarea"]'
@@ -13,6 +16,31 @@ ATTACH_SELECTOR = 'button[data-tooltip-id="attach-button-tooltip"]'
 SEND_SELECTOR = "button:has(svg.tabler-icon-circle-arrow-up-filled)"
 STOP_GENERATING_SELECTOR = 'img[alt="stop icon"]'
 REPLY_SELECTOR = "div.prose"
+
+
+@dataclass(frozen=True)
+class TgenieReadinessResult:
+    ready: bool
+    missing_selector: str | None = None
+
+
+async def check_tgenie_chat_readiness(page: Any, *, timeout_ms: int = 1_500) -> TgenieReadinessResult:
+    for selector in (TEXTAREA_SELECTOR, SEND_SELECTOR):
+        try:
+            await page.locator(selector).first.wait_for(state="visible", timeout=timeout_ms)
+        except Exception:
+            return TgenieReadinessResult(ready=False, missing_selector=selector)
+    return TgenieReadinessResult(ready=True)
+
+
+async def is_tgenie_chat_ready(page: Any, *, timeout_ms: int = 1_500) -> bool:
+    return (await check_tgenie_chat_readiness(page, timeout_ms=timeout_ms)).ready
+
+
+def format_tgenie_readiness_issue(result: TgenieReadinessResult) -> str:
+    if result.ready:
+        return "tGenie chat UI is ready."
+    return f"tGenie chat UI is not ready; missing selector: {result.missing_selector}"
 
 
 class TgenieConversationClient(Protocol):
@@ -59,7 +87,7 @@ Rules:
 - Request only one tool call at a time.
 - Do not claim that you have inspected, read, or understood local files unless Atlas provides file content, an attachment, or saved evidence in the conversation.
 - Preserve useful observations from attachments as structured evidence, including source identity, observation, inference, uncertainty, confidence, and coordinates when available.
-- Available tools include `file.list`, `file.read`, `file.search`, `file.write`, `shell.run`, `file.attach`, and legacy `pdf.attach`.
+- Available tools include {format_tool_names()}.
 - Use `file.attach` for workspace-local attachment paths ending in `.pdf`, `.jpg`, `.jpeg`, or `.png`, for example `{{"path": "docs/report.pdf"}}` or `{{"path": "photos/panel.png"}}`.
 - `pdf.attach` is still accepted for workspace-local PDF paths, but prefer `file.attach`.
 
