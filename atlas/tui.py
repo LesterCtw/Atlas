@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.geometry import Offset, Size
+from textual.strip import Strip
 from textual.widgets import Input, RichLog, Static
 
 from atlas.commands import handle_slash_command
@@ -59,6 +62,8 @@ STATUS_MESSAGES = {
     "error": "Working: Tool call error",
 }
 BASE_SLASH_OPTIONS = ["/help", "/exit"]
+PROMPT_MAX_CONTENT_HEIGHT = 5
+SLASH_SUGGESTION_MAX_VISIBLE = 6
 
 
 class PromptInput(Input):
@@ -74,6 +79,101 @@ class PromptInput(Input):
 
     def action_insert_newline(self) -> None:
         self.insert_text_at_cursor("\n")
+
+    def _watch_value(self, value: str) -> None:
+        super()._watch_value(value)
+        self.refresh(layout=True)
+
+    @property
+    def cursor_screen_offset(self) -> Offset:
+        if not self._should_wrap_prompt():
+            return super().cursor_screen_offset
+
+        x, y, _width, _height = self.content_region
+        width = self._prompt_content_width()
+        cursor_line, cursor_column = self._cursor_line_and_column(width)
+        visible_start = self._visible_prompt_start(width, cursor_line)
+        return Offset(x + cursor_column, y + max(0, cursor_line - visible_start))
+
+    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+        content_width = max(1, width)
+        return min(PROMPT_MAX_CONTENT_HEIGHT, len(self._wrapped_prompt_lines(content_width)))
+
+    def render_line(self, y: int) -> Strip:
+        if not self._should_wrap_prompt():
+            return super().render_line(y)
+
+        width = self._prompt_content_width()
+        cursor_line, cursor_column = self._cursor_line_and_column(width)
+        visible_start = self._visible_prompt_start(width, cursor_line)
+        visible_lines = self._wrapped_prompt_lines(width)[
+            visible_start : visible_start + PROMPT_MAX_CONTENT_HEIGHT
+        ]
+        line_index = visible_start + y
+        line = visible_lines[y] if y < len(visible_lines) else ""
+        text = Text(line, end="")
+
+        if self.has_focus and self._cursor_visible and line_index == cursor_line:
+            cursor_style = self.get_component_rich_style("input--cursor")
+            cursor_index = self._character_index_for_cell_offset(line, cursor_column)
+            if cursor_index >= len(text):
+                text.pad_right(1)
+                cursor_index = len(text) - 1
+            text.stylize(cursor_style, cursor_index, cursor_index + 1)
+
+        segments = list(self.app.console.render(text, self.app.console_options.update_width(width + 1)))
+        strip = Strip(segments)
+        return strip.crop(0, width + 1).extend_cell_length(width + 1).apply_style(self.rich_style)
+
+    def _should_wrap_prompt(self) -> bool:
+        return "\n" in self.value or cell_len(self.value) > self._prompt_content_width()
+
+    def _prompt_content_width(self) -> int:
+        return max(1, self.scrollable_content_region.width or self.content_region.width or self.size.width)
+
+    def _wrapped_prompt_lines(self, width: int, value: str | None = None) -> list[str]:
+        prompt_value = self.value if value is None else value
+        if not prompt_value:
+            return [""]
+
+        lines: list[str] = []
+        for raw_line in prompt_value.split("\n"):
+            if not raw_line:
+                lines.append("")
+                continue
+
+            current = ""
+            current_width = 0
+            for character in raw_line:
+                character_width = cell_len(character)
+                if current and current_width + character_width > width:
+                    lines.append(current)
+                    current = character
+                    current_width = character_width
+                else:
+                    current += character
+                    current_width += character_width
+            lines.append(current)
+        return lines
+
+    def _cursor_line_and_column(self, width: int) -> tuple[int, int]:
+        cursor_prefix = self.value[: self.cursor_position]
+        cursor_lines = self._wrapped_prompt_lines(width, cursor_prefix)
+        return len(cursor_lines) - 1, cell_len(cursor_lines[-1])
+
+    def _visible_prompt_start(self, width: int, cursor_line: int) -> int:
+        line_count = len(self._wrapped_prompt_lines(width))
+        if line_count <= PROMPT_MAX_CONTENT_HEIGHT:
+            return 0
+        return max(0, min(cursor_line - PROMPT_MAX_CONTENT_HEIGHT + 1, line_count - PROMPT_MAX_CONTENT_HEIGHT))
+
+    def _character_index_for_cell_offset(self, text: str, cell_offset: int) -> int:
+        width = 0
+        for index, character in enumerate(text):
+            if width >= cell_offset:
+                return index
+            width += cell_len(character)
+        return len(text)
 
 
 class AtlasApp(App[None]):
@@ -93,7 +193,7 @@ class AtlasApp(App[None]):
 
     #messages {
         height: 1fr;
-        padding: 1 3;
+        padding: 0 3;
         border: none;
         background: #090909;
         color: #ffffff;
@@ -105,7 +205,7 @@ class AtlasApp(App[None]):
 
     #slash-suggestions {
         height: auto;
-        padding: 1 3;
+        padding: 0 3;
         background: #141414;
         color: #999999;
     }
@@ -115,7 +215,8 @@ class AtlasApp(App[None]):
     }
 
     #prompt {
-        height: 3;
+        height: auto;
+        min-height: 3;
         padding: 1 3;
         border: none;
         background: #141414;
@@ -277,7 +378,7 @@ class AtlasApp(App[None]):
         skill_options = [f"/{name}" for name in SkillLoader(self.workspace).list_names()]
         options = [*BASE_SLASH_OPTIONS, *skill_options, *workflow_slash_options()]
         if self._awaiting_tgenie_login:
-            options.append("/login-done")
+            options = ["/login-done", *options]
         if value == "/":
             return options
         filtered_options = [option for option in options if option.startswith(value)]
@@ -292,16 +393,34 @@ class AtlasApp(App[None]):
 
         suggestions.remove_class("hidden")
         lines = Text()
-        for index, option in enumerate(self._slash_suggestions.options):
+        options = self._visible_slash_options()
+        for index, (option_index, option) in enumerate(options):
             if index:
                 lines.append("\n")
-            if index == self._slash_suggestions.selected_index:
+            if option_index == self._slash_suggestions.selected_index:
                 lines.append("› ", style="bold #0099ff on #1c1c1c")
                 lines.append(option, style="bold #ffffff on #1c1c1c")
             else:
                 lines.append("  ")
                 lines.append(option, style="#999999")
         suggestions.update(lines)
+
+    def _visible_slash_options(self) -> list[tuple[int, str]]:
+        options = self._slash_suggestions.options
+        visible_limit = self._slash_suggestion_visible_limit()
+        if len(options) <= visible_limit:
+            return list(enumerate(options))
+
+        selected_index = self._slash_suggestions.selected_index
+        start = max(0, min(selected_index - visible_limit // 2, len(options) - visible_limit))
+        return list(enumerate(options[start : start + visible_limit], start=start))
+
+    def _slash_suggestion_visible_limit(self) -> int:
+        header = self.query_one("#header", Static)
+        prompt = self.query_one("#prompt", Input)
+        reserved_height = header.region.height + max(3, prompt.region.height) + 1
+        available_height = self.size.height - reserved_height
+        return max(1, min(SLASH_SUGGESTION_MAX_VISIBLE, available_height))
 
     def _update_slash_suggestions(self, value: str) -> None:
         if not value.startswith("/"):

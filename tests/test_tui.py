@@ -769,6 +769,52 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(prompt.styles.padding.top, 1)
                 self.assertEqual(prompt.styles.padding.bottom, 1)
 
+    async def test_multiline_prompt_expands_inside_layout(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(42, 10)) as pilot:
+                await pilot.press("h", "i", "shift+enter", "t", "h", "e", "r", "e")
+                await pilot.pause()
+
+                messages = pilot.app.query_one("#messages", RichLog)
+                prompt = pilot.app.query_one("#prompt", Input)
+                self.assertEqual(prompt.content_region.height, 2)
+                self.assertEqual(prompt.region.height, 4)
+                self.assertLessEqual(messages.region.y + messages.region.height, prompt.region.y)
+                self.assertLessEqual(prompt.region.y + prompt.region.height, pilot.app.size.height)
+
+    async def test_long_prompt_wraps_without_overlapping_messages(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(30, 12)) as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                prompt.value = "abcdefghijklmnopqrstuvwxyz0123456789"
+                prompt.cursor_position = len(prompt.value)
+                await pilot.pause()
+
+                messages = pilot.app.query_one("#messages", RichLog)
+                self.assertGreater(prompt.content_region.height, 1)
+                self.assertLessEqual(messages.region.y + messages.region.height, prompt.region.y)
+                self.assertLessEqual(prompt.cursor_screen_offset.y, prompt.content_region.y + prompt.content_region.height - 1)
+
+    async def test_resize_keeps_multiline_prompt_inside_terminal(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test(size=(42, 10)) as pilot:
+                await pilot.press("h", "i", "shift+enter", "t", "h", "e", "r", "e")
+                await pilot.resize_terminal(28, 8)
+                await pilot.pause()
+
+                messages = pilot.app.query_one("#messages", RichLog)
+                prompt = pilot.app.query_one("#prompt", Input)
+                self.assertGreaterEqual(messages.content_region.height, 1)
+                self.assertEqual(prompt.content_region.height, 2)
+                self.assertLessEqual(messages.region.y + messages.region.height, prompt.region.y)
+                self.assertLessEqual(prompt.region.y + prompt.region.height, pilot.app.size.height)
+
     async def test_prompt_cursor_does_not_use_block_background(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
@@ -1081,6 +1127,25 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 selected_marker_style = suggestions.render().spans[0].style
                 self.assertEqual(selected_marker_style.foreground.rgb, (0, 153, 255))
                 self.assertEqual(selected_marker_style.background.rgb, (28, 28, 28))
+
+    async def test_slash_suggestions_are_capped_to_keep_prompt_visible(self) -> None:
+        with TemporaryDirectory() as directory:
+            workspace = Path(directory).resolve()
+            for index in range(12):
+                skill_dir = workspace / ".atlas" / "skills" / f"skill-{index:02d}"
+                skill_dir.mkdir(parents=True)
+                (skill_dir / "SKILL.md").write_text("# Skill\n\nDo work.", encoding="utf-8")
+            app = AtlasApp(workspace=workspace)
+
+            async with app.run_test(size=(40, 12)) as pilot:
+                await pilot.press("/")
+                await pilot.pause()
+
+                suggestions = pilot.app.query_one("#slash-suggestions", Static)
+                prompt = pilot.app.query_one("#prompt", Input)
+                self.assertLessEqual(suggestions.content_region.height, 6)
+                self.assertLessEqual(suggestions.region.y + suggestions.region.height, prompt.region.y)
+                self.assertLessEqual(prompt.region.y + prompt.region.height, pilot.app.size.height)
 
     async def test_slash_suggestions_support_keyboard_selection(self) -> None:
         with TemporaryDirectory() as directory:

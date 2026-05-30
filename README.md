@@ -157,6 +157,7 @@ TUI 操作：
 
 - 直接輸入問題或任務，按 `Enter` 送出。
 - `Shift+Enter` 插入換行。
+- 較長或多行的 prompt 會在輸入區內換行；縮放視窗時 Atlas 會保留底部輸入區可見。
 - 空白輸入框中可用上下方向鍵瀏覽送出歷史。
 - 輸入 `/` 會顯示 slash command 選單。
 - 使用上下方向鍵選擇 slash command。
