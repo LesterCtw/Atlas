@@ -876,7 +876,7 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 cursor_color = cursor_style.bgcolor.triplet
                 self.assertEqual(
                     (cursor_color.red, cursor_color.green, cursor_color.blue),
-                    (20, 20, 20),
+                    (32, 32, 32),
                 )
                 self.assertTrue(cursor_style.underline)
 
@@ -981,6 +981,22 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(set(lines[2]), {"─"})
                 self.assertEqual(lines[3], "› You  say hello")
 
+    async def test_multiline_user_prompt_body_is_not_pushed_right_by_label(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt")
+                prompt.value = "一\n二\n三"
+                await prompt.action_submit()
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                lines = messages.splitlines()
+                user_index = lines.index("› You")
+
+                self.assertEqual(lines[user_index + 1 : user_index + 4], ["一", "二", "三"])
+
     async def test_user_prompt_highlight_does_not_use_background_color(self) -> None:
         with TemporaryDirectory() as directory:
             app = AtlasApp(workspace=Path(directory).resolve())
@@ -997,8 +1013,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 for segment in user_line:
                     self.assertIsNone(segment.style.bgcolor)
                 user_segments = list(user_line)
-                self.assertEqual(rich_color_tuple(user_segments[0]), (0, 153, 255))
-                self.assertEqual(rich_color_tuple(user_segments[2]), (153, 153, 153))
+                self.assertEqual(rich_color_tuple(user_segments[0]), (77, 182, 255))
+                self.assertEqual(rich_color_tuple(user_segments[2]), (208, 208, 208))
                 self.assertEqual(rich_color_tuple(user_segments[3]), (255, 255, 255))
 
     async def test_prompt_text_is_visible_while_typing(self) -> None:
@@ -1052,8 +1068,9 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
                 self.assertEqual(prompt.value, "")
-                self.assertIn("› You  hi", messages)
-                self.assertIn("there", messages)
+                lines = messages.splitlines()
+                user_index = lines.index("› You")
+                self.assertEqual(lines[user_index + 1 : user_index + 3], ["hi", "there"])
 
     async def test_empty_prompt_can_browse_submitted_prompt_history(self) -> None:
         with TemporaryDirectory() as directory:
@@ -1173,8 +1190,8 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("/llm-wiki ingest", suggestion_text)
                 self.assertIn("/skill-creator", suggestion_text)
                 selected_marker_style = suggestions.render().spans[0].style
-                self.assertEqual(selected_marker_style.foreground.rgb, (0, 153, 255))
-                self.assertEqual(selected_marker_style.background.rgb, (28, 28, 28))
+                self.assertEqual(selected_marker_style.foreground.rgb, (77, 182, 255))
+                self.assertEqual(selected_marker_style.background.rgb, (48, 48, 48))
 
     async def test_slash_suggestions_are_capped_to_keep_prompt_visible(self) -> None:
         with TemporaryDirectory() as directory:
@@ -1208,8 +1225,32 @@ class AtlasTuiTests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "/llm-wiki ")
+                self.assertNotIn("loaded skill: llm-wiki", messages)
+                self.assertTrue(pilot.app.query_one("#slash-suggestions", Static).has_class("hidden"))
+
+                await pilot.press("enter")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
                 self.assertEqual(prompt.value, "")
                 self.assertIn("loaded skill: llm-wiki", messages)
+
+    async def test_slash_suggestions_keyboard_selection_tab_completes_without_submitting(self) -> None:
+        with TemporaryDirectory() as directory:
+            app = AtlasApp(workspace=Path(directory).resolve())
+
+            async with app.run_test() as pilot:
+                prompt = pilot.app.query_one("#prompt", Input)
+                await pilot.press("/")
+                await pilot.press("down")
+                await pilot.press("down")
+                await pilot.press("tab")
+                await pilot.pause()
+
+                messages = rich_log_text(pilot.app.query_one("#messages", RichLog))
+                self.assertEqual(prompt.value, "/llm-wiki ")
+                self.assertNotIn("loaded skill: llm-wiki", messages)
                 self.assertTrue(pilot.app.query_one("#slash-suggestions", Static).has_class("hidden"))
 
     async def test_single_slash_suggestion_enter_completes_without_submitting(self) -> None:

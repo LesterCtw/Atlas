@@ -64,6 +64,13 @@ STATUS_MESSAGES = {
 BASE_SLASH_OPTIONS = ["/help", "/exit"]
 PROMPT_MAX_CONTENT_HEIGHT = 5
 SLASH_SUGGESTION_MAX_VISIBLE = 6
+TUI_BACKGROUND = "#050505"
+TUI_SURFACE = "#202020"
+TUI_SELECTED_SURFACE = "#303030"
+TUI_TEXT = "#ffffff"
+TUI_MUTED_TEXT = "#d0d0d0"
+TUI_DIVIDER = "#5a5a5a"
+TUI_ACCENT = "#4db6ff"
 
 
 class PromptInput(Input):
@@ -205,62 +212,62 @@ class PromptInput(Input):
 
 
 class AtlasApp(App[None]):
-    CSS = """
-    Screen {
+    CSS = f"""
+    Screen {{
         layout: vertical;
-        background: #090909;
-        color: #ffffff;
-    }
+        background: {TUI_BACKGROUND};
+        color: {TUI_TEXT};
+    }}
 
-    #header {
+    #header {{
         height: 3;
         padding: 1 3;
-        background: #141414;
-        color: #ffffff;
-    }
+        background: {TUI_SURFACE};
+        color: {TUI_TEXT};
+    }}
 
-    #messages {
+    #messages {{
         height: 1fr;
         padding: 0 3;
         border: none;
-        background: #090909;
-        color: #ffffff;
-    }
+        background: {TUI_BACKGROUND};
+        color: {TUI_TEXT};
+    }}
 
-    #messages:focus {
+    #messages:focus {{
         background-tint: transparent;
-    }
+    }}
 
-    #slash-suggestions {
+    #slash-suggestions {{
         height: auto;
         padding: 0 3;
-        background: #141414;
-        color: #999999;
-    }
+        background: {TUI_SURFACE};
+        color: {TUI_MUTED_TEXT};
+    }}
 
-    .hidden {
+    .hidden {{
         display: none;
-    }
+    }}
 
-    #prompt {
+    #prompt {{
         height: auto;
         min-height: 3;
         padding: 1 3;
         border: none;
-        background: #141414;
-        color: #ffffff;
-    }
+        background: {TUI_SURFACE};
+        color: {TUI_TEXT};
+    }}
 
-    #prompt:focus {
+    #prompt:focus {{
         border: none;
         background-tint: transparent;
-    }
+    }}
 
-    #prompt > .input--cursor {
+    #prompt > .input--cursor {{
         background: transparent;
-        color: #ffffff;
+        color: {TUI_TEXT};
         text-style: underline;
-    }
+    }}
     """
 
     def __init__(
@@ -283,6 +290,7 @@ class AtlasApp(App[None]):
         self._last_tgenie_readiness_issue: str | None = None
         self._pending_fa_stem_folder: Path | None = None
         self._slash_suggestions = SlashSuggestionState()
+        self._completed_slash_prompt: str | None = None
         self._transcript_group: str | None = None
         self._prompt_history = PromptHistory()
 
@@ -302,7 +310,7 @@ class AtlasApp(App[None]):
         messages = self.query_one("#messages", RichLog)
         if group is not None and group != self._transcript_group:
             rule_width = self._transcript_rule_width()
-            rule = Text("─" * rule_width, style="#262626")
+            rule = Text("─" * rule_width, style=TUI_DIVIDER)
             messages.write(rule, width=rule_width)
             self._transcript_group = group
         messages.write(renderable)
@@ -322,11 +330,18 @@ class AtlasApp(App[None]):
             self._write_agent_output(status_message)
 
     def _format_user_prompt(self, prompt: str) -> Text:
+        if "\n" in prompt:
+            return Text.assemble(
+                ("› ", f"bold {TUI_ACCENT}"),
+                ("You", f"bold {TUI_ACCENT}"),
+                ("\n", TUI_MUTED_TEXT),
+                (prompt, f"bold {TUI_TEXT}"),
+            )
         return Text.assemble(
-            ("› ", "bold #0099ff"),
-            ("You", "bold #0099ff"),
-            ("  ", "#999999"),
-            (prompt, "bold #ffffff"),
+            ("› ", f"bold {TUI_ACCENT}"),
+            ("You", f"bold {TUI_ACCENT}"),
+            ("  ", TUI_MUTED_TEXT),
+            (prompt, f"bold {TUI_TEXT}"),
         )
 
     def _resolve_workspace_folder(self, raw_path: str) -> Path:
@@ -426,11 +441,11 @@ class AtlasApp(App[None]):
             if index:
                 lines.append("\n")
             if option_index == self._slash_suggestions.selected_index:
-                lines.append("› ", style="bold #0099ff on #1c1c1c")
-                lines.append(option, style="bold #ffffff on #1c1c1c")
+                lines.append("› ", style=f"bold {TUI_ACCENT} on {TUI_SELECTED_SURFACE}")
+                lines.append(option, style=f"bold {TUI_TEXT} on {TUI_SELECTED_SURFACE}")
             else:
                 lines.append("  ")
-                lines.append(option, style="#999999")
+                lines.append(option, style=TUI_MUTED_TEXT)
         suggestions.update(lines)
 
     def _visible_slash_options(self) -> list[tuple[int, str]]:
@@ -468,19 +483,19 @@ class AtlasApp(App[None]):
     def _selected_slash_option(self) -> str | None:
         return self._slash_suggestions.selected()
 
-    def _single_slash_completion(self, value: str) -> str | None:
+    def _slash_completion(self, value: str) -> str | None:
         prompt = value.strip()
         selected_command = self._selected_slash_option()
         if (
             prompt.startswith("/")
             and selected_command is not None
-            and len(self._slash_suggestions.options) == 1
             and prompt != selected_command
         ):
             return f"{selected_command} "
         return None
 
     def _complete_slash_prompt(self, prompt: Input, completion: str) -> None:
+        self._completed_slash_prompt = completion
         self._set_prompt_value(prompt, completion)
         self._slash_suggestions.clear()
         self._render_slash_suggestions()
@@ -511,7 +526,7 @@ class AtlasApp(App[None]):
             return
 
         if self.focused is prompt and event.key == "tab":
-            completion = self._single_slash_completion(prompt.value)
+            completion = self._slash_completion(prompt.value)
             if completion is not None:
                 self._complete_slash_prompt(prompt, completion)
                 event.prevent_default()
@@ -557,6 +572,13 @@ class AtlasApp(App[None]):
 
     def on_input_changed(self, event: Input.Changed) -> None:
         self._prompt_history.handle_input_changed()
+        completed_slash_prompt = self._completed_slash_prompt
+        if completed_slash_prompt is not None:
+            self._completed_slash_prompt = None
+            if event.value == completed_slash_prompt:
+                self._slash_suggestions.clear()
+                self._render_slash_suggestions()
+                return
         self._update_slash_suggestions(event.value.strip())
 
     async def _run_model_prompt(self, transcript_prompt: str, *, model_prompt: str | None = None) -> None:
@@ -594,7 +616,7 @@ class AtlasApp(App[None]):
             self._write_agent_output(f"Atlas: {result.final_response}")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        completion = self._single_slash_completion(event.value)
+        completion = self._slash_completion(event.value)
         if completion is not None:
             self._complete_slash_prompt(event.input, completion)
             return
